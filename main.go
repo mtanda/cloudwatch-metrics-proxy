@@ -33,10 +33,8 @@ const (
 )
 
 type adapterConfig struct {
-	listenAddr  string
-	configFile  string
-	storagePath string
-	labelDBUrl  string
+	listenAddr string
+	labelDBUrl string
 }
 
 func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
@@ -149,8 +147,6 @@ func main() {
 	var cfg adapterConfig
 
 	flag.StringVar(&cfg.listenAddr, "web.listen-address", ":9415", "Address to listen on for web endpoints.")
-	flag.StringVar(&cfg.configFile, "config.file", "./cloudwatch_read_adapter.yml", "Configuration file path.")
-	flag.StringVar(&cfg.storagePath, "storage.tsdb.path", "./data", "Base path for metrics storage.")
 	flag.StringVar(&cfg.labelDBUrl, "labeldb.address", "http://localhost:8080/", "Address of the label database.")
 	flag.Parse()
 
