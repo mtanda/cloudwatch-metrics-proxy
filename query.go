@@ -33,7 +33,7 @@ func init() {
 	prometheus.MustRegister(cloudwatchApiCalls)
 }
 
-func getQueryWithoutIndex(q *prompb.Query, indexer *Indexer, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func getQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -97,7 +97,7 @@ func getQueryWithoutIndex(q *prompb.Query, indexer *Indexer, maximumStep int64) 
 	return region, queries, nil
 }
 
-func getQueryWithIndex(ctx context.Context, q *prompb.Query, indexer *Indexer, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func getQueryWithIndex(ctx context.Context, q *prompb.Query, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -117,11 +117,11 @@ func getQueryWithIndex(ctx context.Context, q *prompb.Query, indexer *Indexer, m
 	iq := *q
 	iq.Hints = &prompb.ReadHints{}
 	*iq.Hints = *q.Hints
-	if time.Unix(q.Hints.EndMs/1000, 0).Sub(time.Unix(q.Hints.StartMs/1000, 0)) < 2*indexer.interval {
+	if time.Unix(q.Hints.EndMs/1000, 0).Sub(time.Unix(q.Hints.StartMs/1000, 0)) < 2*indexInterval {
 		// expand enough long period to match index
-		iq.Hints.StartMs = time.Unix(q.Hints.EndMs/1000, 0).Add(-2*indexer.interval).Unix() * 1000
+		iq.Hints.StartMs = time.Unix(q.Hints.EndMs/1000, 0).Add(-2*indexInterval).Unix() * 1000
 	}
-	matchedLabelsList, err := indexer.getMatchedLabels(ctx, matchers, iq.Hints.StartMs, q.Hints.EndMs)
+	matchedLabelsList, err := getMatchedLabels(ctx, matchers, iq.Hints.StartMs, q.Hints.EndMs)
 	if err != nil {
 		return region, queries, err
 	}

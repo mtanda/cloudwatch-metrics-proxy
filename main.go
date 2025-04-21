@@ -20,7 +20,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/prometheus/client_golang/prometheus"
-	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 
 	"github.com/prometheus/common/promlog"
@@ -30,6 +29,7 @@ import (
 
 const (
 	PROMETHEUS_MAXIMUM_POINTS = 11000
+	PROMETHEUS_LOOKBACK_DELTA = 5 * time.Minute
 )
 
 type adapterConfig struct {
@@ -38,7 +38,7 @@ type adapterConfig struct {
 	storagePath string
 }
 
-func runQuery(ctx context.Context, indexer *Indexer, q *prompb.Query, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
+func runQuery(ctx context.Context, q *prompb.Query, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	namespace := ""
@@ -67,7 +67,7 @@ func runQuery(ctx context.Context, indexer *Indexer, q *prompb.Query, lookbackDe
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate internal query")
 		}
-		matchedLabelsList, err := indexer.getMatchedLabels(ctx, m, q.StartTimestampMs, q.EndTimestampMs)
+		matchedLabelsList, err := getMatchedLabels(ctx, m, q.StartTimestampMs, q.EndTimestampMs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate internal query")
 		}
@@ -104,16 +104,16 @@ func runQuery(ctx context.Context, indexer *Indexer, q *prompb.Query, lookbackDe
 		var region string
 		var queries []*cloudwatch.GetMetricStatisticsInput
 		var err error
-		if indexer.isExpired(endTime, []string{namespace}) {
+		if isExpired(endTime, []string{namespace}) {
 			if debugMode {
 				level.Info(logger).Log("msg", "querying for CloudWatch without index", "query", fmt.Sprintf("%+v", q))
 			}
-			region, queries, err = getQueryWithoutIndex(q, indexer, maximumStep)
+			region, queries, err = getQueryWithoutIndex(q, maximumStep)
 		} else {
 			if debugMode {
 				level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
 			}
-			region, queries, err = getQueryWithIndex(ctx, q, indexer, maximumStep)
+			region, queries, err = getQueryWithIndex(ctx, q, maximumStep)
 		}
 		if err != nil {
 			level.Error(logger).Log("err", err)
@@ -159,34 +159,8 @@ func main() {
 	config := promlog.Config{Level: &logLevel, Format: &format}
 	logger := promlog.New(&config)
 
-	readCfg, err := LoadConfig(cfg.configFile)
-	if err != nil {
-		level.Error(logger).Log("err", err)
-		panic(err)
-	}
-	if len(readCfg.Targets) == 0 {
-		level.Info(logger).Log("msg", "no targets")
-		os.Exit(0)
-	}
-
-	// set default region
-	region, err := GetDefaultRegion()
-	if err != nil {
-		level.Error(logger).Log("err", err)
-		panic(err)
-	}
-	if len(readCfg.Targets[0].Index.Region) == 0 {
-		readCfg.Targets[0].Index.Region = append(readCfg.Targets[0].Index.Region, region)
-	}
-
 	pctx, cancel := context.WithCancel(context.Background())
 	eg, ctx := errgroup.WithContext(pctx)
-	indexer, err := NewIndexer(readCfg.Targets[0].Index, cfg.storagePath, log.With(logger, "component", "indexer"))
-	if err != nil {
-		level.Error(logger).Log("err", err)
-		panic(err)
-	}
-	indexer.start(eg, ctx)
 
 	srv := &http.Server{Addr: cfg.listenAddr}
 	http.HandleFunc("/metrics", func(rsp http.ResponseWriter, req *http.Request) {
@@ -204,24 +178,6 @@ func main() {
 			httpError(rsp, err)
 			return
 		}
-		mfsi, err := indexer.registry.Gather()
-		if err != nil {
-			httpError(rsp, err)
-			return
-		}
-
-		ln := "database"
-		lv1 := "index"
-		for _, mf := range mfsi {
-			for _, m := range mf.Metric {
-				m.Label = []*io_prometheus_client.LabelPair{}
-				for _, l := range m.Label {
-					m.Label = append(m.Label, &io_prometheus_client.LabelPair{Name: l.Name, Value: l.Value})
-				}
-				m.Label = append(m.Label, &io_prometheus_client.LabelPair{Name: &ln, Value: &lv1})
-			}
-		}
-		mfs = append(mfs, mfsi...)
 
 		contentType := expfmt.Negotiate(req.Header)
 		header := rsp.Header()
@@ -261,7 +217,7 @@ func main() {
 			return
 		}
 
-		timeSeries, err := runQuery(ctx, indexer, req.Queries[0], readCfg.LookbackDelta, logger)
+		timeSeries, err := runQuery(ctx, req.Queries[0], PROMETHEUS_LOOKBACK_DELTA, logger)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
