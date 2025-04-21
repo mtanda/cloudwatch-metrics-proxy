@@ -36,9 +36,10 @@ type adapterConfig struct {
 	listenAddr  string
 	configFile  string
 	storagePath string
+	labelDBUrl  string
 }
 
-func runQuery(ctx context.Context, q *prompb.Query, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
+func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	namespace := ""
@@ -67,7 +68,7 @@ func runQuery(ctx context.Context, q *prompb.Query, lookbackDelta time.Duration,
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate internal query")
 		}
-		matchedLabelsList, err := getMatchedLabels(ctx, m, q.StartTimestampMs, q.EndTimestampMs)
+		matchedLabelsList, err := getMatchedLabels(ctx, labelDBUrl, m, q.StartTimestampMs, q.EndTimestampMs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate internal query")
 		}
@@ -113,7 +114,7 @@ func runQuery(ctx context.Context, q *prompb.Query, lookbackDelta time.Duration,
 			if debugMode {
 				level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
 			}
-			region, queries, err = getQueryWithIndex(ctx, q, maximumStep)
+			region, queries, err = getQueryWithIndex(ctx, q, labelDBUrl, maximumStep)
 		}
 		if err != nil {
 			level.Error(logger).Log("err", err)
@@ -150,6 +151,7 @@ func main() {
 	flag.StringVar(&cfg.listenAddr, "web.listen-address", ":9415", "Address to listen on for web endpoints.")
 	flag.StringVar(&cfg.configFile, "config.file", "./cloudwatch_read_adapter.yml", "Configuration file path.")
 	flag.StringVar(&cfg.storagePath, "storage.tsdb.path", "./data", "Base path for metrics storage.")
+	flag.StringVar(&cfg.labelDBUrl, "labeldb.address", "http://localhost:8080/", "Address of the label database.")
 	flag.Parse()
 
 	logLevel := promlog.AllowedLevel{}
@@ -217,7 +219,7 @@ func main() {
 			return
 		}
 
-		timeSeries, err := runQuery(ctx, req.Queries[0], PROMETHEUS_LOOKBACK_DELTA, logger)
+		timeSeries, err := runQuery(ctx, req.Queries[0], cfg.labelDBUrl, PROMETHEUS_LOOKBACK_DELTA, logger)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
