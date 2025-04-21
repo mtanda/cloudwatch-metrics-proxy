@@ -1,2 +1,8 @@
 global:
   scrape_interval: 15s
+
+remote_read:
+  - url: http://cloudwatch-read-adapter:9415/read
+    read_recent: true
+    required_matchers:
+      job: cloudwatch
