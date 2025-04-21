@@ -38,11 +38,10 @@ type adapterConfig struct {
 	storagePath string
 }
 
-func runQuery(ctx context.Context, indexer *Indexer, archiver *Archiver, q *prompb.Query, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
+func runQuery(ctx context.Context, indexer *Indexer, q *prompb.Query, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
 	result := make(resultMap)
 
 	namespace := ""
-	period := ""
 	debugMode := false
 	debugIndexMode := false
 	originalJobLabel := ""
@@ -62,9 +61,6 @@ func runQuery(ctx context.Context, indexer *Indexer, archiver *Archiver, q *prom
 		}
 		if m.Type == prompb.LabelMatcher_EQ && m.Name == "Namespace" {
 			namespace = m.Value
-		}
-		if m.Type == prompb.LabelMatcher_EQ && m.Name == "Period" {
-			period = m.Value
 		}
 		matchers = append(matchers, m)
 	}
@@ -97,7 +93,6 @@ func runQuery(ctx context.Context, indexer *Indexer, archiver *Archiver, q *prom
 		return result.slice(), nil
 	}
 
-	startTime := time.Unix(int64(q.Hints.StartMs/1000), int64(q.Hints.StartMs%1000*1000))
 	endTime := time.Unix(int64(q.Hints.EndMs/1000), int64(q.Hints.EndMs%1000*1000))
 	now := time.Now().UTC()
 	if endTime.After(now) {
@@ -116,57 +111,6 @@ func runQuery(ctx context.Context, indexer *Indexer, archiver *Archiver, q *prom
 			return nil, fmt.Errorf("failed to get time series from index")
 		}
 		return result.slice(), nil
-	}
-
-	// get time series from past(archived) time range
-	if period == "" && q.Hints.StartMs < q.Hints.EndMs && archiver.isArchived(startTime, []string{namespace}) {
-		if archiver.isExpired(startTime) && !indexer.isExpired(startTime, []string{namespace}) {
-			expiredTime := time.Now().UTC().Add(-archiver.retention)
-			if endTime.Before(expiredTime) {
-				expiredTime = endTime
-			}
-			baq := *q
-			baq.Hints = &prompb.ReadHints{}
-			*baq.Hints = *q.Hints
-			baq.Hints.EndMs = expiredTime.Unix() * 1000
-			offsetForStepMs := q.Hints.StartMs % q.Hints.StepMs
-			q.Hints.StartMs = (baq.Hints.EndMs + q.Hints.StepMs) - ((baq.Hints.EndMs + q.Hints.StepMs) % q.Hints.StepMs) + offsetForStepMs
-			if debugMode {
-				level.Info(logger).Log("msg", "querying for CloudWatch with index before archived period", "query", fmt.Sprintf("%+v", baq))
-			}
-			region, queries, err := getQueryWithIndex(ctx, &baq, indexer, maximumStep)
-			if err != nil {
-				level.Error(logger).Log("err", err)
-				return nil, fmt.Errorf("failed to generate internal query")
-			}
-			err = queryCloudWatch(ctx, region, queries, &baq, lookbackDelta, result)
-			if err != nil {
-				level.Error(logger).Log("err", err)
-				return nil, fmt.Errorf("failed to get time series from CloudWatch")
-			}
-		}
-		if q.Hints.StartMs < q.Hints.EndMs {
-			aq := *q
-			aq.Hints = &prompb.ReadHints{}
-			*aq.Hints = *q.Hints
-			if aq.Hints.EndMs > archiver.s.Timestamp[namespace]*1000 {
-				aq.Hints.EndMs = archiver.s.Timestamp[namespace] * 1000 // tsdb query maxt is inclusive
-			}
-			q.Hints.StartMs = aq.Hints.EndMs
-			if debugMode {
-				level.Info(logger).Log("msg", "querying for archive", "query", fmt.Sprintf("%+v", aq))
-			}
-			archivedResult, err := archiver.Query(ctx, &aq, maximumStep, lookbackDelta)
-			if err != nil {
-				level.Error(logger).Log("err", err)
-				return nil, fmt.Errorf("failed to get time series from archive")
-			}
-			if debugMode {
-				level.Info(logger).Log("msg", "dump archive query result", "result", fmt.Sprintf("%+v", archivedResult))
-				level.Info(logger).Log("msg", fmt.Sprintf("Get %d time series from archive.", len(archivedResult)))
-			}
-			result.append(archivedResult)
-		}
 	}
 
 	// get time series from recent time range
@@ -248,23 +192,6 @@ func main() {
 	if len(readCfg.Targets[0].Index.Region) == 0 {
 		readCfg.Targets[0].Index.Region = append(readCfg.Targets[0].Index.Region, region)
 	}
-	if len(readCfg.Targets[0].Archive.Region) == 0 {
-		readCfg.Targets[0].Archive.Region = append(readCfg.Targets[0].Archive.Region, region)
-	}
-
-	for _, n := range readCfg.Targets[0].Archive.Namespace {
-		found := false
-		for _, nn := range readCfg.Targets[0].Index.Namespace {
-			if n == nn {
-				found = true
-			}
-		}
-		if !found {
-			err := "archive target namespace should be indexed"
-			level.Error(logger).Log("err", err)
-			panic(err)
-		}
-	}
 
 	pctx, cancel := context.WithCancel(context.Background())
 	eg, ctx := errgroup.WithContext(pctx)
@@ -274,12 +201,6 @@ func main() {
 		panic(err)
 	}
 	indexer.start(eg, ctx)
-	archiver, err := NewArchiver(readCfg.Targets[0].Archive, cfg.storagePath, indexer, log.With(logger, "component", "archiver"))
-	if err != nil {
-		level.Error(logger).Log("err", err)
-		panic(err)
-	}
-	archiver.start(eg, ctx)
 
 	srv := &http.Server{Addr: cfg.listenAddr}
 	http.HandleFunc("/metrics", func(rsp http.ResponseWriter, req *http.Request) {
@@ -302,11 +223,6 @@ func main() {
 			httpError(rsp, err)
 			return
 		}
-		mfsa, err := archiver.registry.Gather()
-		if err != nil {
-			httpError(rsp, err)
-			return
-		}
 
 		ln := "database"
 		lv1 := "index"
@@ -320,18 +236,6 @@ func main() {
 			}
 		}
 		mfs = append(mfs, mfsi...)
-
-		lv2 := "archive"
-		for _, mf := range mfsa {
-			for _, m := range mf.Metric {
-				m.Label = []*io_prometheus_client.LabelPair{}
-				for _, l := range m.Label {
-					m.Label = append(m.Label, &io_prometheus_client.LabelPair{Name: l.Name, Value: l.Value})
-				}
-				m.Label = append(m.Label, &io_prometheus_client.LabelPair{Name: &ln, Value: &lv2})
-			}
-		}
-		mfs = append(mfs, mfsa...)
 
 		contentType := expfmt.Negotiate(req.Header)
 		header := rsp.Header()
@@ -371,7 +275,7 @@ func main() {
 			return
 		}
 
-		timeSeries, err := runQuery(ctx, indexer, archiver, req.Queries[0], readCfg.LookbackDelta, logger)
+		timeSeries, err := runQuery(ctx, indexer, req.Queries[0], readCfg.LookbackDelta, logger)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

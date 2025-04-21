@@ -13,17 +13,10 @@ type Config struct {
 }
 
 type Target struct {
-	Index   IndexConfig   `yaml:"index"`
-	Archive ArchiveConfig `yaml:"archive"`
+	Index IndexConfig `yaml:"index"`
 }
 
 type IndexConfig struct {
-	Region    []string `yaml:"region"`
-	Namespace []string `yaml:"namespace"`
-	Retention string   `yaml:"retention"`
-}
-
-type ArchiveConfig struct {
 	Region    []string `yaml:"region"`
 	Namespace []string `yaml:"namespace"`
 	Retention string   `yaml:"retention"`
