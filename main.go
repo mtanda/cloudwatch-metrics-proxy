@@ -120,7 +120,7 @@ func runQuery(ctx context.Context, indexer *Indexer, q *prompb.Query, lookbackDe
 			return nil, fmt.Errorf("failed to generate internal query")
 		}
 		if region != "" && len(queries) > 0 {
-			err = queryCloudWatch(ctx, region, queries, q, lookbackDelta, result)
+			result, err = queryCloudWatch(ctx, region, queries, q, lookbackDelta)
 			if err != nil {
 				level.Error(logger).Log("err", err, "query", queries)
 				return nil, fmt.Errorf("failed to get time series from CloudWatch")

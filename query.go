@@ -229,32 +229,34 @@ func isSingleStatistic(queries []*cloudwatch.GetMetricStatisticsInput) bool {
 	return true
 }
 
-func queryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration, result []*prompb.TimeSeries) error {
+func queryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+	var result []*prompb.TimeSeries
+
 	if !isSingleStatistic(queries) {
 		if len(queries) > 200 {
-			return fmt.Errorf("Too many concurrent queries")
+			return result, fmt.Errorf("Too many concurrent queries")
 		}
 		for _, query := range queries {
 			cwResult, err := queryCloudWatchGetMetricStatistics(ctx, region, query, q, lookbackDelta)
 			if err != nil {
-				return err
+				return result, err
 			}
-			result = cwResult
+			result = append(result, cwResult...)
 		}
 	} else {
 		if len(queries)/70 > 25 {
-			return fmt.Errorf("Too many concurrent queries")
+			return result, fmt.Errorf("Too many concurrent queries")
 		}
 		for i := 0; i < len(queries); i += 70 {
 			e := int(math.Min(float64(i+70), float64(len(queries))))
 			cwResult, err := queryCloudWatchGetMetricData(ctx, region, queries[i:e], q, lookbackDelta)
 			if err != nil {
-				return err
+				return result, err
 			}
-			result = cwResult
+			result = append(result, cwResult...)
 		}
 	}
-	return nil
+	return result, nil
 }
 
 func queryCloudWatchGetMetricStatistics(ctx context.Context, region string, query *cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
