@@ -229,7 +229,7 @@ func isSingleStatistic(queries []*cloudwatch.GetMetricStatisticsInput) bool {
 	return true
 }
 
-func queryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration, result resultMap) error {
+func queryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration, result []*prompb.TimeSeries) error {
 	if !isSingleStatistic(queries) {
 		if len(queries) > 200 {
 			return fmt.Errorf("Too many concurrent queries")
@@ -239,7 +239,7 @@ func queryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.G
 			if err != nil {
 				return err
 			}
-			result.append(cwResult)
+			result = cwResult
 		}
 	} else {
 		if len(queries)/70 > 25 {
@@ -251,14 +251,14 @@ func queryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.G
 			if err != nil {
 				return err
 			}
-			result.append(cwResult)
+			result = cwResult
 		}
 	}
 	return nil
 }
 
-func queryCloudWatchGetMetricStatistics(ctx context.Context, region string, query *cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) (resultMap, error) {
-	result := make(resultMap)
+func queryCloudWatchGetMetricStatistics(ctx context.Context, region string, query *cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+	var result []*prompb.TimeSeries
 	svc, err := getClient(ctx, region)
 	if err != nil {
 		return nil, err
@@ -384,23 +384,15 @@ func queryCloudWatchGetMetricStatistics(ctx context.Context, region string, quer
 		}
 	}
 
-	// generate unique id
 	for _, ts := range tsm {
-		id := ""
-		sort.Slice(ts.Labels, func(i, j int) bool {
-			return ts.Labels[i].Name < ts.Labels[j].Name
-		})
-		for _, label := range ts.Labels {
-			id = id + label.Name + label.Value
-		}
-		result[id] = ts
+		result = append(result, ts)
 	}
 
 	return result, nil
 }
 
-func queryCloudWatchGetMetricData(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) (resultMap, error) {
-	result := make(resultMap)
+func queryCloudWatchGetMetricData(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+	var result []*prompb.TimeSeries
 	svc, err := getClient(ctx, region)
 	if err != nil {
 		return nil, err
@@ -530,16 +522,8 @@ func queryCloudWatchGetMetricData(ctx context.Context, region string, queries []
 		nextToken = *resp.NextToken
 	}
 
-	// generate unique id
 	for _, ts := range tsm {
-		id := ""
-		sort.Slice(ts.Labels, func(i, j int) bool {
-			return ts.Labels[i].Name < ts.Labels[j].Name
-		})
-		for _, label := range ts.Labels {
-			id = id + label.Name + label.Value
-		}
-		result[id] = ts
+		result = append(result, ts)
 	}
 
 	return result, nil

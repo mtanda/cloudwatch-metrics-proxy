@@ -39,7 +39,7 @@ type adapterConfig struct {
 }
 
 func runQuery(ctx context.Context, indexer *Indexer, q *prompb.Query, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
-	result := make(resultMap)
+	var result []*prompb.TimeSeries
 
 	namespace := ""
 	debugMode := false
@@ -71,7 +71,7 @@ func runQuery(ctx context.Context, indexer *Indexer, q *prompb.Query, lookbackDe
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate internal query")
 		}
-		for i, matchedLabels := range matchedLabelsList {
+		for _, matchedLabels := range matchedLabelsList {
 			ts := &prompb.TimeSeries{}
 			for _, label := range matchedLabels {
 				if label.Name == "MetricName" {
@@ -82,10 +82,10 @@ func runQuery(ctx context.Context, indexer *Indexer, q *prompb.Query, lookbackDe
 			ts.Labels = append(ts.Labels, prompb.Label{Name: "job", Value: originalJobLabel})
 			t := time.Unix(int64(q.EndTimestampMs/1000), int64(q.EndTimestampMs%1000*1000))
 			ts.Samples = append(ts.Samples, prompb.Sample{Value: 0, Timestamp: t.Unix() * 1000})
-			result[fmt.Sprint(i)] = ts
+			result = append(result, ts)
 		}
 		//level.Debug(logger).Log("msg", "namespace is required")
-		return result.slice(), nil
+		return result, nil
 	}
 
 	endTime := time.Unix(int64(q.Hints.EndMs/1000), int64(q.Hints.EndMs%1000*1000))
@@ -141,7 +141,7 @@ func runQuery(ctx context.Context, indexer *Indexer, q *prompb.Query, lookbackDe
 		level.Info(logger).Log("msg", fmt.Sprintf("Returned %d time series.", len(result)))
 	}
 
-	return result.slice(), nil
+	return result, nil
 }
 
 func main() {
