@@ -24,9 +24,6 @@ nfpms:
       - src: "packaging/deb/etc/default/cloudwatch_metrics_proxy"
         dst: "/etc/default/cloudwatch_metrics_proxy"
         type: config
-      - src: "packaging/deb/usr/local/etc/cloudwatch_metrics_proxy.yml"
-        dst: "/usr/local/etc/cloudwatch_metrics_proxy.yml"
-        type: config
       - src: "packaging/deb/systemd"
         dst: "/usr/lib/systemd/system"
     scripts:
