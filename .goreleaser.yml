@@ -11,9 +11,9 @@ builds:
     - amd64
 nfpms:
   -
-    package_name: cloudwatch-read-adapter
-    file_name_template: 'cloudwatch-read-adapter_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}{{ if .Mips }}_{{ .Mips }}{{ end }}'
-    homepage: https://github.com/mtanda/cloudwatch_read_adapter
+    package_name: cloudwatch-metrics-proxy
+    file_name_template: 'cloudwatch-metrics-proxy_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}{{ if .Mips }}_{{ .Mips }}{{ end }}'
+    homepage: https://github.com/mtanda/cloudwatch_metrics_proxy
     maintainer: Mitsuhiro Tanda
     description: cloudwatch read adapter
     license: Apache 2.0
@@ -21,11 +21,11 @@ nfpms:
       - deb
     bindir: /usr/local/bin
     contents:
-      - src: "packaging/deb/etc/default/cloudwatch_read_adapter"
-        dst: "/etc/default/cloudwatch_read_adapter"
+      - src: "packaging/deb/etc/default/cloudwatch_metrics_proxy"
+        dst: "/etc/default/cloudwatch_metrics_proxy"
         type: config
-      - src: "packaging/deb/usr/local/etc/cloudwatch_read_adapter.yml"
-        dst: "/usr/local/etc/cloudwatch_read_adapter.yml"
+      - src: "packaging/deb/usr/local/etc/cloudwatch_metrics_proxy.yml"
+        dst: "/usr/local/etc/cloudwatch_metrics_proxy.yml"
         type: config
       - src: "packaging/deb/systemd"
         dst: "/usr/lib/systemd/system"

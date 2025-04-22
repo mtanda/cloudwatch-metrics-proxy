@@ -1,3 +1,3 @@
 systemctl daemon-reload
-systemctl enable cloudwatch-read-adapter.service
-systemctl restart cloudwatch-read-adapter.service
+systemctl enable cloudwatch-metrics-proxy.service
+systemctl restart cloudwatch-metrics-proxy.service

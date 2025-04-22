@@ -1,2 +1,2 @@
-systemctl stop cloudwatch-read-adapter.service
-systemctl disable cloudwatch-read-adapter.service
+systemctl stop cloudwatch-metrics-proxy.service
+systemctl disable cloudwatch-metrics-proxy.service

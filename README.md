@@ -1,4 +1,4 @@
-# cloudwatch_read_adapter
+# cloudwatch_metrics_proxy
 CloudWatch remote read adapter for Prometheus.
 
 ## Setup
@@ -11,7 +11,7 @@ remote_read:
 
 And then, launch read adapter.
 ```
-./cloudwatch_read_adapter
+./cloudwatch_metrics_proxy
 ```
 
 ## AWS credentials

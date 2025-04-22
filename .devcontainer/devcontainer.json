@@ -1,9 +1,9 @@
 {
-	"name": "cloudwatch-read-adapter",
+	"name": "cloudwatch-metrics-proxy",
 	"dockerComposeFile": [
 		"./docker-compose.yml"
 	],
-	"service": "cloudwatch-read-adapter",
+	"service": "cloudwatch-metrics-proxy",
 	"runServices": [
 		"prometheus"
 	],

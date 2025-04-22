@@ -1,4 +1,4 @@
-module github.com/mtanda/cloudwatch_read_adapter
+module github.com/mtanda/cloudwatch_metrics_proxy
 
 go 1.19.0
 

@@ -21,7 +21,7 @@ import (
 var (
 	cloudwatchApiCalls = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "cloudwatch_read_adapter_cloudwatch_api_calls_total",
+			Name: "cloudwatch_metrics_proxy_cloudwatch_api_calls_total",
 			Help: "The total number of CloudWatch API calls",
 		},
 		[]string{"api", "namespace", "from", "status"},
