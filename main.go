@@ -146,7 +146,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 func main() {
 	var cfg adapterConfig
 
-	flag.StringVar(&cfg.listenAddr, "web.listen-address", ":9415", "Address to listen on for web endpoints.")
+	flag.StringVar(&cfg.listenAddr, "web.listen-address", ":9420", "Address to listen on for web endpoints.")
 	flag.StringVar(&cfg.labelDBUrl, "labeldb.address", "http://localhost:8080/", "Address of the label database.")
 	flag.Parse()
 
