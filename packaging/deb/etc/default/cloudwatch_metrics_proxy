@@ -1,1 +1,1 @@
-ARGS="--config.file=/usr/local/etc/cloudwatch_metrics_proxy.yml --storage.tsdb.path=/var/lib/cloudwatch_metrics_proxy"
+ARGS="--labeldb.address http://localhost:9421/"
