@@ -1,5 +1,8 @@
+version: 2
+
 builds:
 - main: ./
+  binary: cloudwatch_metrics_proxy
   flags: -a -tags netgo
   ldflags: |
     -s -w
