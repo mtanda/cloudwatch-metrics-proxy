@@ -66,7 +66,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate internal query")
 		}
-		matchedLabelsList, err := getMatchedLabels(ctx, labelDBUrl, m, q.StartTimestampMs, q.EndTimestampMs)
+		matchedLabelsList, err := getMatchedLabels(ctx, labelDBUrl, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate internal query")
 		}

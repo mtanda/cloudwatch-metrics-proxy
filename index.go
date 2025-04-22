@@ -31,10 +31,15 @@ func getMatchedLabels(ctx context.Context, url string, matchers []*labels.Matche
 
 	req.Header.Set("Content-Type", "application/json")
 	q := req.URL.Query()
-	q.Add("match[]", matchers[0].String())
-	for _, matcher := range matchers[1:] {
-		q.Add("match[]", matcher.String())
+	matchersStr := "{"
+	for i, matcher := range matchers {
+		if i > 0 {
+			matchersStr += ","
+		}
+		matchersStr += fmt.Sprintf("%s%s\"%s\"", matcher.Name, matcher.Type, matcher.Value)
 	}
+	matchersStr += "}"
+	q.Add("match[]", matchersStr)
 	q.Add("start", strconv.FormatInt(start, 10))
 	q.Add("end", strconv.FormatInt(end, 10))
 	req.URL.RawQuery = q.Encode()
