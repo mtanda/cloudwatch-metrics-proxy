@@ -285,12 +285,7 @@ func queryCloudWatchGetMetricStatistics(ctx context.Context, region string, quer
 	// auto calibrate period
 	highResolution := true
 	if query.Period == nil {
-		period := calibratePeriod(*query.StartTime)
-		queryTimeRange := (*query.EndTime).Sub(*query.StartTime).Seconds()
-		if queryTimeRange/float64(period) >= 1440 {
-			period = int64(math.Ceil(queryTimeRange/float64(1440)/float64(periodUnit))) * int64(periodUnit)
-		}
-		query.Period = aws.Int32(int32(period))
+		query.Period = calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit)
 		highResolution = false
 	}
 
@@ -411,12 +406,7 @@ func queryCloudWatchGetMetricData(ctx context.Context, region string, queries []
 	for i, query := range queries {
 		// auto calibrate period
 		if query.Period == nil {
-			period := calibratePeriod(*query.StartTime)
-			queryTimeRange := (*query.EndTime).Sub(*query.StartTime).Seconds()
-			if queryTimeRange/float64(period) >= 1440 {
-				period = int64(math.Ceil(queryTimeRange/float64(1440)/float64(periodUnit))) * int64(periodUnit)
-			}
-			query.Period = aws.Int32(int32(period))
+			query.Period = calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit)
 		}
 
 		mdq := types.MetricDataQuery{
@@ -529,6 +519,15 @@ func queryCloudWatchGetMetricData(ctx context.Context, region string, queries []
 	}
 
 	return result, nil
+}
+
+func calcQueryPeriod(startTime time.Time, endTime time.Time, periodUnit int64) *int32 {
+	period := calibratePeriod(startTime)
+	queryTimeRange := (endTime).Sub(startTime).Seconds()
+	if queryTimeRange/float64(period) >= 1440 {
+		period = int64(math.Ceil(queryTimeRange/float64(1440)/float64(periodUnit))) * int64(periodUnit)
+	}
+	return aws.Int32(int32(period))
 }
 
 func getClient(ctx context.Context, region string) (*cloudwatch.Client, error) {
