@@ -87,12 +87,6 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 		return result, nil
 	}
 
-	endTime := time.Unix(int64(q.Hints.EndMs/1000), int64(q.Hints.EndMs%1000*1000))
-	now := time.Now().UTC()
-	if endTime.After(now) {
-		q.Hints.EndMs = now.Unix() * 1000
-		endTime = time.Unix(int64(q.Hints.EndMs/1000), int64(q.Hints.EndMs%1000*1000))
-	}
 	maximumStep := int64(math.Ceil(float64(q.Hints.StepMs) / float64(1000)))
 	if maximumStep == 0 {
 		maximumStep = 1 // q.Hints.StepMs == 0 in some query...
