@@ -160,6 +160,55 @@ func getLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, original
 	return result, nil
 }
 
+func remoteReadHandler(ctx context.Context, cfg *adapterConfig, logger log.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		compressed, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		reqBuf, err := snappy.Decode(nil, compressed)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		var req prompb.ReadRequest
+		if err := proto.Unmarshal(reqBuf, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if len(req.Queries) != 1 {
+			http.Error(w, "Can only handle one query.", http.StatusBadRequest)
+			return
+		}
+
+		timeSeries, err := runQuery(ctx, req.Queries[0], cfg.labelDBUrl, PROMETHEUS_LOOKBACK_DELTA, logger)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		resp := prompb.ReadResponse{
+			Results: []*prompb.QueryResult{
+				{Timeseries: timeSeries},
+			},
+		}
+		data, err := proto.Marshal(&resp)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		if _, err := w.Write(snappy.Encode(nil, data)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
 func main() {
 	var cfg adapterConfig
 
@@ -208,52 +257,7 @@ func main() {
 			}
 		}
 	})
-	http.HandleFunc("/read", func(w http.ResponseWriter, r *http.Request) {
-		compressed, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		reqBuf, err := snappy.Decode(nil, compressed)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		var req prompb.ReadRequest
-		if err := proto.Unmarshal(reqBuf, &req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if len(req.Queries) != 1 {
-			http.Error(w, "Can only handle one query.", http.StatusBadRequest)
-			return
-		}
-
-		timeSeries, err := runQuery(ctx, req.Queries[0], cfg.labelDBUrl, PROMETHEUS_LOOKBACK_DELTA, logger)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		resp := prompb.ReadResponse{
-			Results: []*prompb.QueryResult{
-				{Timeseries: timeSeries},
-			},
-		}
-		data, err := proto.Marshal(&resp)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/x-protobuf")
-		if _, err := w.Write(snappy.Encode(nil, data)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	})
+	http.HandleFunc("/read", remoteReadHandler(ctx, &cfg, logger))
 
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
