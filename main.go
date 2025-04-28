@@ -103,21 +103,28 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 		var region string
 		var queries []*cloudwatch.GetMetricStatisticsInput
 		var err error
-		if isExpired(endTime, []string{namespace}) {
-			if debugMode {
-				level.Info(logger).Log("msg", "querying for CloudWatch without index", "query", fmt.Sprintf("%+v", q))
-			}
-			region, queries, err = getQueryWithoutIndex(q, maximumStep)
-		} else {
-			if debugMode {
-				level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
-			}
-			region, queries, err = getQueryWithIndex(ctx, q, labelDBUrl, maximumStep)
+
+		if debugMode {
+			level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
 		}
+		region, queries, err = getQueryWithIndex(ctx, q, labelDBUrl, maximumStep)
 		if err != nil {
 			level.Error(logger).Log("err", err)
 			return nil, fmt.Errorf("failed to generate internal query")
 		}
+
+		// if no queries are generated, try to get time series without index
+		if len(queries) == 0 {
+			if debugMode {
+				level.Info(logger).Log("msg", "querying for CloudWatch without index", "query", fmt.Sprintf("%+v", q))
+			}
+			region, queries, err = getQueryWithoutIndex(q, maximumStep)
+			if err != nil {
+				level.Error(logger).Log("err", err)
+				return nil, fmt.Errorf("failed to generate internal query")
+			}
+		}
+
 		if region != "" && len(queries) > 0 {
 			result, err = queryCloudWatch(ctx, region, queries, q, lookbackDelta)
 			if err != nil {

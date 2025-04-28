@@ -70,7 +70,3 @@ func getMatchedLabels(ctx context.Context, url string, matchers []*labels.Matche
 
 	return matchedLabels, nil
 }
-
-func isExpired(t time.Time, namespace []string) bool {
-	return false
-}
