@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/model/labels"
 	prom_value "github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/prompb"
 )
@@ -97,23 +98,10 @@ func getQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudw
 	return region, queries, nil
 }
 
-func getQueryWithIndex(ctx context.Context, q *prompb.Query, labelDBUrl string, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher, labelDBUrl string, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
-	// index doesn't have statistics label, get label matchers without statistics
-	mm := make([]*prompb.LabelMatcher, 0)
-	for _, m := range q.Matchers {
-		if m.Name == "Statistic" || m.Name == "ExtendedStatistic" || m.Name == "Period" {
-			continue
-		}
-		mm = append(mm, m)
-	}
-
-	matchers, err := fromLabelMatchers(mm)
-	if err != nil {
-		return region, queries, err
-	}
 	iq := *q
 	iq.Hints = &prompb.ReadHints{}
 	*iq.Hints = *q.Hints

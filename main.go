@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 
 	"github.com/prometheus/common/promlog"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"golang.org/x/sync/errgroup"
 )
@@ -76,10 +77,24 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, 
 	var queries []*cloudwatch.GetMetricStatisticsInput
 	var err error
 
+	// index doesn't have statistics label, get label matchers without statistics
+	mm := make([]*prompb.LabelMatcher, 0)
+	for _, m := range q.Matchers {
+		if m.Name == "Statistic" || m.Name == "ExtendedStatistic" || m.Name == "Period" {
+			continue
+		}
+		mm = append(mm, m)
+	}
+
+	matchers, err := fromLabelMatchers(mm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate internal query")
+	}
+
 	if debugMode {
 		level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
 	}
-	region, queries, err = getQueryWithIndex(ctx, q, labelDBUrl, maximumStep)
+	region, queries, err = getQueryWithIndex(ctx, q, matchers, labelDBUrl, maximumStep)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return nil, fmt.Errorf("failed to generate internal query")
@@ -157,6 +172,27 @@ func getLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, original
 		result = append(result, ts)
 	}
 	//level.Debug(logger).Log("msg", "namespace is required")
+	return result, nil
+}
+
+func fromLabelMatchers(matchers []*prompb.LabelMatcher) ([]*labels.Matcher, error) {
+	result := make([]*labels.Matcher, 0, len(matchers))
+	for _, matcher := range matchers {
+		var m *labels.Matcher
+		switch matcher.Type {
+		case prompb.LabelMatcher_EQ:
+			m = labels.MustNewMatcher(labels.MatchEqual, matcher.Name, matcher.Value)
+		case prompb.LabelMatcher_NEQ:
+			m = labels.MustNewMatcher(labels.MatchNotEqual, matcher.Name, matcher.Value)
+		case prompb.LabelMatcher_RE:
+			m = labels.MustNewMatcher(labels.MatchRegexp, matcher.Name, "^(?:"+matcher.Value+")$")
+		case prompb.LabelMatcher_NRE:
+			m = labels.MustNewMatcher(labels.MatchNotRegexp, matcher.Name, "^(?:"+matcher.Value+")$")
+		default:
+			return nil, fmt.Errorf("invalid matcher type")
+		}
+		result = append(result, m)
+	}
 	return result, nil
 }
 
