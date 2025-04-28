@@ -13,6 +13,9 @@ import (
 
 const (
 	indexInterval = time.Duration(60) * time.Minute // TODO: get from labels database
+	// https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/cloudwatch_limits.html
+	// GetMetricStatistics has a limit of 400 TPS per Region
+	seriesLimit = 400
 )
 
 type Response struct {
@@ -42,6 +45,7 @@ func getMatchedLabels(ctx context.Context, url string, matchers []*labels.Matche
 	q.Add("match[]", matchersStr)
 	q.Add("start", strconv.FormatInt(start, 10))
 	q.Add("end", strconv.FormatInt(end, 10))
+	q.Add("limit", strconv.FormatInt(seriesLimit, 10))
 	req.URL.RawQuery = q.Encode()
 
 	resp, err := httpClient.Do(req)
