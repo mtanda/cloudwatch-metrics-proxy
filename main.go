@@ -40,24 +40,7 @@ type adapterConfig struct {
 func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
-	namespace := ""
-	debugMode := false
-	originalJobLabel := ""
-	matchers := make([]*prompb.LabelMatcher, 0)
-	for _, m := range q.Matchers {
-		if m.Type == prompb.LabelMatcher_EQ && m.Name == "job" {
-			originalJobLabel = m.Value
-			continue
-		}
-		if m.Type == prompb.LabelMatcher_EQ && m.Name == "debug" {
-			debugMode = true
-			continue
-		}
-		if m.Type == prompb.LabelMatcher_EQ && m.Name == "Namespace" {
-			namespace = m.Value
-		}
-		matchers = append(matchers, m)
-	}
+	namespace, debugMode, originalJobLabel, matchers := parseQuery(q)
 	q.Matchers = matchers
 
 	// return label name/value list for query editor
@@ -120,6 +103,28 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 	}
 
 	return result, nil
+}
+
+func parseQuery(q *prompb.Query) (string, bool, string, []*prompb.LabelMatcher) {
+	namespace := ""
+	debugMode := false
+	originalJobLabel := ""
+	matchers := make([]*prompb.LabelMatcher, 0)
+	for _, m := range q.Matchers {
+		if m.Type == prompb.LabelMatcher_EQ && m.Name == "job" {
+			originalJobLabel = m.Value
+			continue
+		}
+		if m.Type == prompb.LabelMatcher_EQ && m.Name == "debug" {
+			debugMode = true
+			continue
+		}
+		if m.Type == prompb.LabelMatcher_EQ && m.Name == "Namespace" {
+			namespace = m.Value
+		}
+		matchers = append(matchers, m)
+	}
+	return namespace, debugMode, originalJobLabel, matchers
 }
 
 func getLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string, result []*prompb.TimeSeries) ([]*prompb.TimeSeries, error) {
