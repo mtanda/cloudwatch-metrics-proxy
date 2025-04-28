@@ -209,6 +209,37 @@ func remoteReadHandler(ctx context.Context, cfg *adapterConfig, logger log.Logge
 	}
 }
 
+func metricsHandler(rsp http.ResponseWriter, req *http.Request) {
+	httpError := func(rsp http.ResponseWriter, err error) {
+		rsp.Header().Del("Content-Encoding")
+		http.Error(
+			rsp,
+			"An error has occurred while serving metrics:\n\n"+err.Error(),
+			http.StatusInternalServerError,
+		)
+	}
+
+	mfs, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		httpError(rsp, err)
+		return
+	}
+
+	contentType := expfmt.Negotiate(req.Header)
+	header := rsp.Header()
+	header.Set("Content-Type", string(contentType))
+
+	w := io.Writer(rsp)
+	enc := expfmt.NewEncoder(w, contentType)
+
+	for _, mf := range mfs {
+		if err := enc.Encode(mf); err != nil {
+			httpError(rsp, err)
+			return
+		}
+	}
+}
+
 func main() {
 	var cfg adapterConfig
 
@@ -227,36 +258,7 @@ func main() {
 	eg, ctx := errgroup.WithContext(pctx)
 
 	srv := &http.Server{Addr: cfg.listenAddr}
-	http.HandleFunc("/metrics", func(rsp http.ResponseWriter, req *http.Request) {
-		httpError := func(rsp http.ResponseWriter, err error) {
-			rsp.Header().Del("Content-Encoding")
-			http.Error(
-				rsp,
-				"An error has occurred while serving metrics:\n\n"+err.Error(),
-				http.StatusInternalServerError,
-			)
-		}
-
-		mfs, err := prometheus.DefaultGatherer.Gather()
-		if err != nil {
-			httpError(rsp, err)
-			return
-		}
-
-		contentType := expfmt.Negotiate(req.Header)
-		header := rsp.Header()
-		header.Set("Content-Type", string(contentType))
-
-		w := io.Writer(rsp)
-		enc := expfmt.NewEncoder(w, contentType)
-
-		for _, mf := range mfs {
-			if err := enc.Encode(mf); err != nil {
-				httpError(rsp, err)
-				return
-			}
-		}
-	})
+	http.HandleFunc("/metrics", metricsHandler)
 	http.HandleFunc("/read", remoteReadHandler(ctx, &cfg, logger))
 
 	term := make(chan os.Signal, 1)
