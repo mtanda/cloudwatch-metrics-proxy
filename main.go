@@ -52,12 +52,9 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 	}
 
 	// get time series from recent time range
-	var result []*prompb.TimeSeries
-	if q.Hints.StartMs < q.Hints.EndMs {
-		result, err := runCloudWatchQuery(ctx, debugMode, logger, q, labelDBUrl, maximumStep, result, lookbackDelta)
-		if err != nil {
-			return result, err
-		}
+	result, err := runCloudWatchQuery(ctx, debugMode, logger, q, labelDBUrl, maximumStep, lookbackDelta)
+	if err != nil {
+		return result, err
 	}
 
 	if originalJobLabel != "" {
@@ -73,7 +70,8 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 	return result, nil
 }
 
-func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, q *prompb.Query, labelDBUrl string, maximumStep int64, result []*prompb.TimeSeries, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, q *prompb.Query, labelDBUrl string, maximumStep int64, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+	var result []*prompb.TimeSeries
 	var region string
 	var queries []*cloudwatch.GetMetricStatisticsInput
 	var err error
