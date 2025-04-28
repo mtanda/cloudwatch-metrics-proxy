@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -73,9 +72,6 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 
 func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, q *prompb.Query, labelDBUrl string, maximumStep int64, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
-	var region string
-	var queries []*cloudwatch.GetMetricStatisticsInput
-	var err error
 
 	// index doesn't have statistics label, get label matchers without statistics
 	mm := make([]*prompb.LabelMatcher, 0)
@@ -94,7 +90,7 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, 
 	if debugMode {
 		level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
 	}
-	region, queries, err = getQueryWithIndex(ctx, q, matchers, labelDBUrl, maximumStep)
+	region, queries, err := getQueryWithIndex(ctx, q, matchers, labelDBUrl, maximumStep)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return nil, fmt.Errorf("failed to generate internal query")
