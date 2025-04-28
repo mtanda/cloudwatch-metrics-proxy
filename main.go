@@ -62,29 +62,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 
 	// return label name/value list for query editor
 	if namespace == "" || q.Hints == nil {
-		m, err := fromLabelMatchers(q.Matchers)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate internal query")
-		}
-		matchedLabelsList, err := getMatchedLabels(ctx, labelDBUrl, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate internal query")
-		}
-		for _, matchedLabels := range matchedLabelsList {
-			ts := &prompb.TimeSeries{}
-			for _, label := range matchedLabels {
-				if label.Name == "MetricName" {
-					continue
-				}
-				ts.Labels = append(ts.Labels, prompb.Label{Name: label.Name, Value: label.Value})
-			}
-			ts.Labels = append(ts.Labels, prompb.Label{Name: "job", Value: originalJobLabel})
-			t := time.Unix(int64(q.EndTimestampMs/1000), int64(q.EndTimestampMs%1000*1000))
-			ts.Samples = append(ts.Samples, prompb.Sample{Value: 0, Timestamp: t.Unix() * 1000})
-			result = append(result, ts)
-		}
-		//level.Debug(logger).Log("msg", "namespace is required")
-		return result, nil
+		return getLabels(ctx, q, labelDBUrl, originalJobLabel, result)
 	}
 
 	maximumStep := int64(math.Ceil(float64(q.Hints.StepMs) / float64(1000)))
@@ -141,6 +119,32 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 		level.Info(logger).Log("msg", fmt.Sprintf("Returned %d time series.", len(result)))
 	}
 
+	return result, nil
+}
+
+func getLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string, result []*prompb.TimeSeries) ([]*prompb.TimeSeries, error) {
+	m, err := fromLabelMatchers(q.Matchers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate internal query")
+	}
+	matchedLabelsList, err := getMatchedLabels(ctx, labelDBUrl, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate internal query")
+	}
+	for _, matchedLabels := range matchedLabelsList {
+		ts := &prompb.TimeSeries{}
+		for _, label := range matchedLabels {
+			if label.Name == "MetricName" {
+				continue
+			}
+			ts.Labels = append(ts.Labels, prompb.Label{Name: label.Name, Value: label.Value})
+		}
+		ts.Labels = append(ts.Labels, prompb.Label{Name: "job", Value: originalJobLabel})
+		t := time.Unix(int64(q.EndTimestampMs/1000), int64(q.EndTimestampMs%1000*1000))
+		ts.Samples = append(ts.Samples, prompb.Sample{Value: 0, Timestamp: t.Unix() * 1000})
+		result = append(result, ts)
+	}
+	//level.Debug(logger).Log("msg", "namespace is required")
 	return result, nil
 }
 
