@@ -1,4 +1,4 @@
-package main
+package index
 
 import (
 	"context"
@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/prometheus/prometheus/model/labels"
 )
 
 const (
-	indexInterval = time.Duration(60) * time.Minute // TODO: get from labels database
 	// https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/cloudwatch_limits.html
 	// GetMetricStatistics has a limit of 400 TPS per Region
 	seriesLimit = 400
@@ -25,7 +23,7 @@ type Response struct {
 
 type Metric map[string]string
 
-func getMatchedLabels(ctx context.Context, url string, matchers []*labels.Matcher, start int64, end int64) ([]labels.Labels, error) {
+func GetMatchedLabels(ctx context.Context, url string, matchers []*labels.Matcher, start int64, end int64) ([]labels.Labels, error) {
 	httpClient := &http.Client{}
 	req, err := http.NewRequest("GET", url+"/api/v1/series", nil)
 	if err != nil {

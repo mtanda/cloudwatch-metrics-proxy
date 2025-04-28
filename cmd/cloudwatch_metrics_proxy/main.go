@@ -21,6 +21,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/expfmt"
 
+	"github.com/mtanda/cloudwatch_metrics_proxy/internal/cloudwatch"
+	"github.com/mtanda/cloudwatch_metrics_proxy/internal/index"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
@@ -28,7 +30,6 @@ import (
 )
 
 const (
-	PROMETHEUS_MAXIMUM_POINTS = 11000
 	PROMETHEUS_LOOKBACK_DELTA = 5 * time.Minute
 )
 
@@ -90,7 +91,7 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, 
 	if debugMode {
 		level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
 	}
-	region, queries, err := getQueryWithIndex(ctx, q, matchers, labelDBUrl, maximumStep)
+	region, queries, err := cloudwatch.GetQueryWithIndex(ctx, q, matchers, labelDBUrl, maximumStep)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return nil, fmt.Errorf("failed to generate internal query")
@@ -101,7 +102,7 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, 
 		if debugMode {
 			level.Info(logger).Log("msg", "querying for CloudWatch without index", "query", fmt.Sprintf("%+v", q))
 		}
-		region, queries, err = getQueryWithoutIndex(q, maximumStep)
+		region, queries, err = cloudwatch.GetQueryWithoutIndex(q, maximumStep)
 		if err != nil {
 			level.Error(logger).Log("err", err)
 			return nil, fmt.Errorf("failed to generate internal query")
@@ -109,7 +110,7 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, 
 	}
 
 	if region != "" && len(queries) > 0 {
-		result, err = queryCloudWatch(ctx, region, queries, q, lookbackDelta)
+		result, err = cloudwatch.QueryCloudWatch(ctx, region, queries, q, lookbackDelta)
 		if err != nil {
 			level.Error(logger).Log("err", err, "query", queries)
 			return nil, fmt.Errorf("failed to get time series from CloudWatch")
@@ -150,7 +151,7 @@ func getLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, original
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate internal query")
 	}
-	matchedLabelsList, err := getMatchedLabels(ctx, labelDBUrl, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000)
+	matchedLabelsList, err := index.GetMatchedLabels(ctx, labelDBUrl, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate internal query")
 	}

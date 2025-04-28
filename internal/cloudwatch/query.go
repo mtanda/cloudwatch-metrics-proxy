@@ -1,4 +1,4 @@
-package main
+package cloudwatch
 
 import (
 	"context"
@@ -13,10 +13,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/mtanda/cloudwatch_metrics_proxy/internal/index"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	prom_value "github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/prompb"
+)
+
+const (
+	PROMETHEUS_MAXIMUM_POINTS = 11000
+	indexInterval             = time.Duration(60) * time.Minute // TODO: get from labels database
 )
 
 var (
@@ -34,7 +40,7 @@ func init() {
 	prometheus.MustRegister(cloudwatchApiCalls)
 }
 
-func getQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func GetQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -98,7 +104,7 @@ func getQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudw
 	return region, queries, nil
 }
 
-func getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher, labelDBUrl string, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func GetQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher, labelDBUrl string, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -109,7 +115,7 @@ func getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.
 		// expand enough long period to match index
 		iq.Hints.StartMs = time.Unix(q.Hints.EndMs/1000, 0).Add(-2*indexInterval).Unix() * 1000
 	}
-	matchedLabelsList, err := getMatchedLabels(ctx, labelDBUrl, matchers, iq.Hints.StartMs/1000, q.Hints.EndMs/1000)
+	matchedLabelsList, err := index.GetMatchedLabels(ctx, labelDBUrl, matchers, iq.Hints.StartMs/1000, q.Hints.EndMs/1000)
 	if err != nil {
 		return region, queries, err
 	}
@@ -217,7 +223,7 @@ func isSingleStatistic(queries []*cloudwatch.GetMetricStatisticsInput) bool {
 	return true
 }
 
-func queryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+func QueryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	if !isSingleStatistic(queries) {
