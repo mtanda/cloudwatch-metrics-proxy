@@ -40,7 +40,24 @@ func init() {
 	prometheus.MustRegister(cloudwatchApiCalls)
 }
 
-func GetQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func GetQuery(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher, labelDBUrl string, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+	region, queries, err := getQueryWithIndex(ctx, q, matchers, labelDBUrl, maximumStep)
+	if err != nil {
+		return region, queries, err
+	}
+
+	// if no queries are generated, try to get time series without index
+	if len(queries) == 0 {
+		region, queries, err = getQueryWithoutIndex(q, maximumStep)
+		if err != nil {
+			return region, queries, err
+		}
+	}
+
+	return region, queries, nil
+}
+
+func getQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -104,7 +121,7 @@ func GetQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudw
 	return region, queries, nil
 }
 
-func GetQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher, labelDBUrl string, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher, labelDBUrl string, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 

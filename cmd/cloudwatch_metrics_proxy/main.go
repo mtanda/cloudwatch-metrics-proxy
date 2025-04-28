@@ -89,24 +89,12 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, 
 	}
 
 	if debugMode {
-		level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
+		level.Info(logger).Log("msg", "querying for CloudWatch", "query", fmt.Sprintf("%+v", q))
 	}
-	region, queries, err := cloudwatch.GetQueryWithIndex(ctx, q, matchers, labelDBUrl, maximumStep)
+	region, queries, err := cloudwatch.GetQuery(ctx, q, matchers, labelDBUrl, maximumStep)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return nil, fmt.Errorf("failed to generate internal query")
-	}
-
-	// if no queries are generated, try to get time series without index
-	if len(queries) == 0 {
-		if debugMode {
-			level.Info(logger).Log("msg", "querying for CloudWatch without index", "query", fmt.Sprintf("%+v", q))
-		}
-		region, queries, err = cloudwatch.GetQueryWithoutIndex(q, maximumStep)
-		if err != nil {
-			level.Error(logger).Log("err", err)
-			return nil, fmt.Errorf("failed to generate internal query")
-		}
 	}
 
 	if region != "" && len(queries) > 0 {
