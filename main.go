@@ -38,14 +38,12 @@ type adapterConfig struct {
 }
 
 func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
-	var result []*prompb.TimeSeries
-
 	namespace, debugMode, originalJobLabel, matchers := parseQuery(q)
 	q.Matchers = matchers
 
 	// return label name/value list for query editor
 	if namespace == "" || q.Hints == nil {
-		return getLabels(ctx, q, labelDBUrl, originalJobLabel, result)
+		return getLabels(ctx, q, labelDBUrl, originalJobLabel)
 	}
 
 	maximumStep := int64(math.Ceil(float64(q.Hints.StepMs) / float64(1000)))
@@ -54,41 +52,11 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 	}
 
 	// get time series from recent time range
+	var result []*prompb.TimeSeries
 	if q.Hints.StartMs < q.Hints.EndMs {
-		var region string
-		var queries []*cloudwatch.GetMetricStatisticsInput
-		var err error
-
-		if debugMode {
-			level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
-		}
-		region, queries, err = getQueryWithIndex(ctx, q, labelDBUrl, maximumStep)
+		result, err := runCloudWatchQuery(ctx, debugMode, logger, q, labelDBUrl, maximumStep, result, lookbackDelta)
 		if err != nil {
-			level.Error(logger).Log("err", err)
-			return nil, fmt.Errorf("failed to generate internal query")
-		}
-
-		// if no queries are generated, try to get time series without index
-		if len(queries) == 0 {
-			if debugMode {
-				level.Info(logger).Log("msg", "querying for CloudWatch without index", "query", fmt.Sprintf("%+v", q))
-			}
-			region, queries, err = getQueryWithoutIndex(q, maximumStep)
-			if err != nil {
-				level.Error(logger).Log("err", err)
-				return nil, fmt.Errorf("failed to generate internal query")
-			}
-		}
-
-		if region != "" && len(queries) > 0 {
-			result, err = queryCloudWatch(ctx, region, queries, q, lookbackDelta)
-			if err != nil {
-				level.Error(logger).Log("err", err, "query", queries)
-				return nil, fmt.Errorf("failed to get time series from CloudWatch")
-			}
-		}
-		if debugMode {
-			level.Info(logger).Log("msg", "dump query result", "result", fmt.Sprintf("%+v", result))
+			return result, err
 		}
 	}
 
@@ -102,6 +70,45 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 		level.Info(logger).Log("msg", fmt.Sprintf("Returned %d time series.", len(result)))
 	}
 
+	return result, nil
+}
+
+func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, q *prompb.Query, labelDBUrl string, maximumStep int64, result []*prompb.TimeSeries, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+	var region string
+	var queries []*cloudwatch.GetMetricStatisticsInput
+	var err error
+
+	if debugMode {
+		level.Info(logger).Log("msg", "querying for CloudWatch with index", "query", fmt.Sprintf("%+v", q))
+	}
+	region, queries, err = getQueryWithIndex(ctx, q, labelDBUrl, maximumStep)
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return nil, fmt.Errorf("failed to generate internal query")
+	}
+
+	// if no queries are generated, try to get time series without index
+	if len(queries) == 0 {
+		if debugMode {
+			level.Info(logger).Log("msg", "querying for CloudWatch without index", "query", fmt.Sprintf("%+v", q))
+		}
+		region, queries, err = getQueryWithoutIndex(q, maximumStep)
+		if err != nil {
+			level.Error(logger).Log("err", err)
+			return nil, fmt.Errorf("failed to generate internal query")
+		}
+	}
+
+	if region != "" && len(queries) > 0 {
+		result, err = queryCloudWatch(ctx, region, queries, q, lookbackDelta)
+		if err != nil {
+			level.Error(logger).Log("err", err, "query", queries)
+			return nil, fmt.Errorf("failed to get time series from CloudWatch")
+		}
+	}
+	if debugMode {
+		level.Info(logger).Log("msg", "dump query result", "result", fmt.Sprintf("%+v", result))
+	}
 	return result, nil
 }
 
@@ -127,7 +134,9 @@ func parseQuery(q *prompb.Query) (string, bool, string, []*prompb.LabelMatcher) 
 	return namespace, debugMode, originalJobLabel, matchers
 }
 
-func getLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string, result []*prompb.TimeSeries) ([]*prompb.TimeSeries, error) {
+func getLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string) ([]*prompb.TimeSeries, error) {
+	var result []*prompb.TimeSeries
+
 	m, err := fromLabelMatchers(q.Matchers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate internal query")
