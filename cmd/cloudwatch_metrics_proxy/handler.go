@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
 	"time"
@@ -21,7 +20,7 @@ const (
 
 func remoteReadHandler(ctx context.Context, cfg *adapterConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		compressed, err := ioutil.ReadAll(r.Body)
+		compressed, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
