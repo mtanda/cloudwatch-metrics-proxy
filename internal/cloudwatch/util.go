@@ -15,7 +15,7 @@ import (
 
 var invalidMetricNamePattern = regexp.MustCompile(`[^a-zA-Z0-9:_]`)
 
-func SafeMetricName(name string) string {
+func safeMetricName(name string) string {
 	if len(name) == 0 {
 		return ""
 	}
@@ -88,7 +88,7 @@ func calibratePeriod(startTime time.Time) int64 {
 
 var regionCache = ""
 
-func GetDefaultRegion() (string, error) {
+func getDefaultRegion() (string, error) {
 	var region string
 
 	if regionCache != "" {

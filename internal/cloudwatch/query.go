@@ -111,7 +111,7 @@ func getQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudw
 	queries = append(queries, query)
 
 	if region == "" {
-		region, err := GetDefaultRegion()
+		region, err := getDefaultRegion()
 		if err != nil {
 			return region, queries, err
 		}
@@ -308,7 +308,7 @@ func queryCloudWatchGetMetricStatistics(ctx context.Context, region string, quer
 		ts := &prompb.TimeSeries{}
 		ts.Labels = append(ts.Labels, prompb.Label{Name: "Region", Value: region})
 		ts.Labels = append(ts.Labels, prompb.Label{Name: "Namespace", Value: *query.Namespace})
-		ts.Labels = append(ts.Labels, prompb.Label{Name: "__name__", Value: SafeMetricName(*query.MetricName)})
+		ts.Labels = append(ts.Labels, prompb.Label{Name: "__name__", Value: safeMetricName(*query.MetricName)})
 		for _, d := range query.Dimensions {
 			ts.Labels = append(ts.Labels, prompb.Label{Name: *d.Name, Value: *d.Value})
 		}
@@ -442,7 +442,7 @@ func queryCloudWatchGetMetricData(ctx context.Context, region string, queries []
 		ts := &prompb.TimeSeries{}
 		ts.Labels = append(ts.Labels, prompb.Label{Name: "Region", Value: region})
 		ts.Labels = append(ts.Labels, prompb.Label{Name: "Namespace", Value: *r.MetricStat.Metric.Namespace})
-		ts.Labels = append(ts.Labels, prompb.Label{Name: "__name__", Value: SafeMetricName(*r.MetricStat.Metric.MetricName)})
+		ts.Labels = append(ts.Labels, prompb.Label{Name: "__name__", Value: safeMetricName(*r.MetricStat.Metric.MetricName)})
 		for _, d := range r.MetricStat.Metric.Dimensions {
 			ts.Labels = append(ts.Labels, prompb.Label{Name: *d.Name, Value: *d.Value})
 		}
