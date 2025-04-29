@@ -45,14 +45,13 @@ type CloudWatchClient struct {
 	readHints     prompb.ReadHints
 }
 
-func New(labelDBUrl string, maximumStep int64, lookbackDelta time.Duration, readHints prompb.ReadHints) (*CloudWatchClient, error) {
+func New(labelDBUrl string, maximumStep int64, lookbackDelta time.Duration, readHints prompb.ReadHints) *CloudWatchClient {
 	return &CloudWatchClient{
 		labelDBUrl:    labelDBUrl,
 		maximumStep:   maximumStep,
 		lookbackDelta: lookbackDelta,
 		readHints:     readHints,
-	}, nil
-
+	}
 }
 
 func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query) (string, []*cloudwatch.GetMetricStatisticsInput, error) {

@@ -25,11 +25,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 		maximumStep = 1 // q.Hints.StepMs == 0 in some query...
 	}
 
-	cloudwatchClient, err := cloudwatch.New(labelDBUrl, maximumStep, PROMETHEUS_LOOKBACK_DELTA, *q.Hints)
-	if err != nil {
-		slog.Error("failed to new client", "err", err)
-		return nil, fmt.Errorf("failed to new client")
-	}
+	cloudwatchClient := cloudwatch.New(labelDBUrl, maximumStep, PROMETHEUS_LOOKBACK_DELTA, *q.Hints)
 
 	// return label name/value list for query editor
 	if namespace == "" || q.Hints == nil {
