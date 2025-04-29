@@ -67,7 +67,7 @@ func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query) (strin
 		}
 	}
 
-	matchers, err := fromLabelMatchers(mm)
+	matchers, err := parseQueryMatchers(mm)
 	if err != nil {
 		return "", nil, err
 	}
@@ -516,7 +516,7 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 func (c *CloudWatchClient) GetLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
-	m, err := fromLabelMatchers(q.Matchers)
+	m, err := parseQueryMatchers(q.Matchers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate internal query")
 	}

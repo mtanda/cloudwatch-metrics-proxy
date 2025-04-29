@@ -92,7 +92,7 @@ func calibratePeriod(startTime time.Time) int64 {
 	return period
 }
 
-func fromLabelMatchers(matchers []*prompb.LabelMatcher) ([]*labels.Matcher, error) {
+func parseQueryMatchers(matchers []*prompb.LabelMatcher) ([]*labels.Matcher, error) {
 	result := make([]*labels.Matcher, 0, len(matchers))
 	for _, matcher := range matchers {
 		var m *labels.Matcher
