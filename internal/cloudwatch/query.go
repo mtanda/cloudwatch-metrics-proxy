@@ -56,17 +56,31 @@ func New(labelDBUrl string, maximumStep int64, lookbackDelta time.Duration, read
 
 }
 
-func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+	// index doesn't have statistics label, get label matchers without statistics
+	mm := make([]*prompb.LabelMatcher, 0)
+	for _, m := range q.Matchers {
+		if m.Name == "Statistic" || m.Name == "ExtendedStatistic" || m.Name == "Period" {
+			continue
+		}
+		mm = append(mm, m)
+	}
+
+	matchers, err := fromLabelMatchers(mm)
+	if err != nil {
+		return "", nil, err
+	}
+
 	region, queries, err := c.getQueryWithIndex(ctx, q, matchers)
 	if err != nil {
-		return region, queries, err
+		return "", nil, err
 	}
 
 	// if no queries are generated, try to get time series without index
 	if len(queries) == 0 {
 		region, queries, err = c.getQueryWithoutIndex(q, matchers)
 		if err != nil {
-			return region, queries, err
+			return "", nil, err
 		}
 	}
 

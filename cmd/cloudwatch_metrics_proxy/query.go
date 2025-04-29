@@ -48,25 +48,11 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 func runCloudWatchQuery(ctx context.Context, cloudwatchClient *cloudwatch.CloudWatchClient, debugMode bool, q *prompb.Query, labelDBUrl string, originalJobLabel string) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
-	// index doesn't have statistics label, get label matchers without statistics
-	mm := make([]*prompb.LabelMatcher, 0)
-	for _, m := range q.Matchers {
-		if m.Name == "Statistic" || m.Name == "ExtendedStatistic" || m.Name == "Period" {
-			continue
-		}
-		mm = append(mm, m)
-	}
-
-	matchers, err := fromLabelMatchers(mm)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate internal query")
-	}
-
 	if debugMode {
 		slog.Info("querying for CloudWatch", "query", fmt.Sprintf("%+v", q))
 	}
 
-	region, queries, err := cloudwatchClient.GetQuery(ctx, q, matchers)
+	region, queries, err := cloudwatchClient.GetQuery(ctx, q)
 	if err != nil {
 		slog.Error("failed to get query", "err", err)
 		return nil, fmt.Errorf("failed to generate internal query")
