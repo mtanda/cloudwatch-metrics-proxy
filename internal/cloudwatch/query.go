@@ -64,7 +64,7 @@ func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query, matche
 
 	// if no queries are generated, try to get time series without index
 	if len(queries) == 0 {
-		region, queries, err = c.getQueryWithoutIndex(q)
+		region, queries, err = c.getQueryWithoutIndex(q, matchers)
 		if err != nil {
 			return region, queries, err
 		}
@@ -73,13 +73,13 @@ func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query, matche
 	return region, queries, nil
 }
 
-func (c *CloudWatchClient) getQueryWithoutIndex(q *prompb.Query) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) getQueryWithoutIndex(q *prompb.Query, matchers []*labels.Matcher) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
 	query := &cloudwatch.GetMetricStatisticsInput{}
-	for _, m := range q.Matchers {
-		if m.Type != prompb.LabelMatcher_EQ {
+	for _, m := range matchers {
+		if m.Type != labels.MatchEqual {
 			continue // only support equal matcher
 		}
 
@@ -93,6 +93,20 @@ func (c *CloudWatchClient) getQueryWithoutIndex(q *prompb.Query) (string, []*clo
 			query.Namespace = aws.String(m.Value)
 		case "MetricName":
 			query.MetricName = aws.String(m.Value)
+		default:
+			if m.Value != "" {
+				query.Dimensions = append(query.Dimensions, types.Dimension{
+					Name:  aws.String(m.Name),
+					Value: aws.String(m.Value),
+				})
+			}
+		}
+		if query.MetricName == nil {
+			query.MetricName = aws.String(oldMetricName) // backward compatibility
+		}
+	}
+	for _, m := range q.Matchers {
+		switch m.Name {
 		case "Statistic":
 			query.Statistics = []types.Statistic{types.Statistic(m.Value)}
 		case "ExtendedStatistic":
@@ -111,16 +125,6 @@ func (c *CloudWatchClient) getQueryWithoutIndex(q *prompb.Query) (string, []*clo
 				v = maximumStep
 			}
 			query.Period = aws.Int32(int32(v))
-		default:
-			if m.Value != "" {
-				query.Dimensions = append(query.Dimensions, types.Dimension{
-					Name:  aws.String(m.Name),
-					Value: aws.String(m.Value),
-				})
-			}
-		}
-		if query.MetricName == nil {
-			query.MetricName = aws.String(oldMetricName) // backward compatibility
 		}
 	}
 	query.StartTime = aws.Time(time.Unix(int64(c.readHints.StartMs/1000), int64(c.readHints.StartMs%1000*1000)))
