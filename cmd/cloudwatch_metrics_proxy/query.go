@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/mtanda/cloudwatch_metrics_proxy/internal/cloudwatch"
-	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 )
 
@@ -99,25 +98,4 @@ func parseQuery(q *prompb.Query) (string, bool, string, []*prompb.LabelMatcher) 
 		matchers = append(matchers, m)
 	}
 	return namespace, debugMode, originalJobLabel, matchers
-}
-
-func fromLabelMatchers(matchers []*prompb.LabelMatcher) ([]*labels.Matcher, error) {
-	result := make([]*labels.Matcher, 0, len(matchers))
-	for _, matcher := range matchers {
-		var m *labels.Matcher
-		switch matcher.Type {
-		case prompb.LabelMatcher_EQ:
-			m = labels.MustNewMatcher(labels.MatchEqual, matcher.Name, matcher.Value)
-		case prompb.LabelMatcher_NEQ:
-			m = labels.MustNewMatcher(labels.MatchNotEqual, matcher.Name, matcher.Value)
-		case prompb.LabelMatcher_RE:
-			m = labels.MustNewMatcher(labels.MatchRegexp, matcher.Name, "^(?:"+matcher.Value+")$")
-		case prompb.LabelMatcher_NRE:
-			m = labels.MustNewMatcher(labels.MatchNotRegexp, matcher.Name, "^(?:"+matcher.Value+")$")
-		default:
-			return nil, fmt.Errorf("invalid matcher type")
-		}
-		result = append(result, m)
-	}
-	return result, nil
 }
