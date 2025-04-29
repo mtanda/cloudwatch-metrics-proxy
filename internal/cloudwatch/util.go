@@ -2,6 +2,7 @@ package cloudwatch
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"regexp"
@@ -11,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/prompb"
 )
 
 var invalidMetricNamePattern = regexp.MustCompile(`[^a-zA-Z0-9:_]`)
@@ -84,6 +87,27 @@ func calibratePeriod(startTime time.Time) int64 {
 	}
 
 	return period
+}
+
+func fromLabelMatchers(matchers []*prompb.LabelMatcher) ([]*labels.Matcher, error) {
+	result := make([]*labels.Matcher, 0, len(matchers))
+	for _, matcher := range matchers {
+		var m *labels.Matcher
+		switch matcher.Type {
+		case prompb.LabelMatcher_EQ:
+			m = labels.MustNewMatcher(labels.MatchEqual, matcher.Name, matcher.Value)
+		case prompb.LabelMatcher_NEQ:
+			m = labels.MustNewMatcher(labels.MatchNotEqual, matcher.Name, matcher.Value)
+		case prompb.LabelMatcher_RE:
+			m = labels.MustNewMatcher(labels.MatchRegexp, matcher.Name, "^(?:"+matcher.Value+")$")
+		case prompb.LabelMatcher_NRE:
+			m = labels.MustNewMatcher(labels.MatchNotRegexp, matcher.Name, "^(?:"+matcher.Value+")$")
+		default:
+			return nil, fmt.Errorf("invalid matcher type")
+		}
+		result = append(result, m)
+	}
+	return result, nil
 }
 
 var regionCache = ""
