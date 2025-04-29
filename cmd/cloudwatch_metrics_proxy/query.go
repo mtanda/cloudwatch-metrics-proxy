@@ -73,7 +73,7 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, la
 	}
 
 	if region != "" && len(queries) > 0 {
-		result, err = cloudwatchClient.QueryCloudWatch(ctx, region, queries, q)
+		result, err = cloudwatchClient.QueryCloudWatch(ctx, region, queries)
 		if err != nil {
 			slog.Error("failed to execute query", "err", err, "query", queries)
 			return nil, fmt.Errorf("failed to get time series from CloudWatch")

@@ -226,7 +226,7 @@ func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, q *prompb.Quer
 	return region, queries, nil
 }
 
-func (c *CloudWatchClient) QueryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query) ([]*prompb.TimeSeries, error) {
+func (c *CloudWatchClient) QueryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	// switch to GetMetricData if the query is not single statistic
@@ -235,7 +235,7 @@ func (c *CloudWatchClient) QueryCloudWatch(ctx context.Context, region string, q
 			return result, fmt.Errorf("Too many concurrent queries")
 		}
 		for _, query := range queries {
-			cwResult, err := c.queryCloudWatchGetMetricStatistics(ctx, region, query, q)
+			cwResult, err := c.queryCloudWatchGetMetricStatistics(ctx, region, query)
 			if err != nil {
 				return result, err
 			}
@@ -247,7 +247,7 @@ func (c *CloudWatchClient) QueryCloudWatch(ctx context.Context, region string, q
 		}
 		for i := 0; i < len(queries); i += 70 {
 			e := int(math.Min(float64(i+70), float64(len(queries))))
-			cwResult, err := c.queryCloudWatchGetMetricData(ctx, region, queries[i:e], q)
+			cwResult, err := c.queryCloudWatchGetMetricData(ctx, region, queries[i:e])
 			if err != nil {
 				return result, err
 			}
@@ -257,7 +257,7 @@ func (c *CloudWatchClient) QueryCloudWatch(ctx context.Context, region string, q
 	return result, nil
 }
 
-func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Context, region string, query *cloudwatch.GetMetricStatisticsInput, q *prompb.Query) ([]*prompb.TimeSeries, error) {
+func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Context, region string, query *cloudwatch.GetMetricStatisticsInput) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 	svc, err := getClient(ctx, region)
 	if err != nil {
@@ -389,7 +389,7 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Contex
 	return result, nil
 }
 
-func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query) ([]*prompb.TimeSeries, error) {
+func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 	svc, err := getClient(ctx, region)
 	if err != nil {
