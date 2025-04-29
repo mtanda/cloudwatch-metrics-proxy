@@ -23,9 +23,19 @@ type Response struct {
 
 type Metric map[string]string
 
-func GetMatchedLabels(ctx context.Context, url string, matchers []*labels.Matcher, start int64, end int64) ([]labels.Labels, error) {
+type LabelDBClient struct {
+	url string
+}
+
+func New(url string) *LabelDBClient {
+	return &LabelDBClient{
+		url: url,
+	}
+}
+
+func (l *LabelDBClient) GetMatchedLabels(ctx context.Context, matchers []*labels.Matcher, start int64, end int64) ([]labels.Labels, error) {
 	httpClient := &http.Client{}
-	req, err := http.NewRequest("GET", url+"/api/v1/series", nil)
+	req, err := http.NewRequest("GET", l.url+"/api/v1/series", nil)
 	if err != nil {
 		return nil, err
 	}

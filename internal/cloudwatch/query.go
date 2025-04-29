@@ -39,15 +39,15 @@ func init() {
 }
 
 type CloudWatchClient struct {
-	labelDBUrl    string
+	ldb           *index.LabelDBClient
 	maximumStep   int64
 	lookbackDelta time.Duration
 	readHints     prompb.ReadHints
 }
 
-func New(labelDBUrl string, maximumStep int64, lookbackDelta time.Duration, readHints prompb.ReadHints) *CloudWatchClient {
+func New(ldb *index.LabelDBClient, maximumStep int64, lookbackDelta time.Duration, readHints prompb.ReadHints) *CloudWatchClient {
 	return &CloudWatchClient{
-		labelDBUrl:    labelDBUrl,
+		ldb:           ldb,
 		maximumStep:   maximumStep,
 		lookbackDelta: lookbackDelta,
 		readHints:     readHints,
@@ -156,7 +156,7 @@ func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*la
 		// expand enough long period to match index
 		matchLabelsStartMs = time.Unix(c.readHints.EndMs/1000, 0).Add(-2*indexInterval).Unix() * 1000
 	}
-	matchedLabelsList, err := index.GetMatchedLabels(ctx, c.labelDBUrl, matchers, matchLabelsStartMs/1000, c.readHints.EndMs/1000)
+	matchedLabelsList, err := c.ldb.GetMatchedLabels(ctx, matchers, matchLabelsStartMs/1000, c.readHints.EndMs/1000)
 	if err != nil {
 		return region, queries, err
 	}
@@ -520,7 +520,7 @@ func (c *CloudWatchClient) GetLabels(ctx context.Context, q *prompb.Query, label
 	if err != nil {
 		return nil, err
 	}
-	matchedLabelsList, err := index.GetMatchedLabels(ctx, labelDBUrl, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000)
+	matchedLabelsList, err := c.ldb.GetMatchedLabels(ctx, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000)
 	if err != nil {
 		return nil, err
 	}

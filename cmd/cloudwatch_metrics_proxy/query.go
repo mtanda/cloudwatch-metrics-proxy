@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mtanda/cloudwatch_metrics_proxy/internal/cloudwatch"
+	"github.com/mtanda/cloudwatch_metrics_proxy/internal/index"
 	"github.com/prometheus/prometheus/prompb"
 )
 
@@ -24,7 +25,8 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 		maximumStep = 1 // q.Hints.StepMs == 0 in some query...
 	}
 
-	cloudwatchClient := cloudwatch.New(labelDBUrl, maximumStep, PROMETHEUS_LOOKBACK_DELTA, *q.Hints)
+	ldb := index.New(labelDBUrl)
+	cloudwatchClient := cloudwatch.New(ldb, maximumStep, PROMETHEUS_LOOKBACK_DELTA, *q.Hints)
 
 	// return label name/value list for query editor
 	if namespace == "" || q.Hints == nil {
