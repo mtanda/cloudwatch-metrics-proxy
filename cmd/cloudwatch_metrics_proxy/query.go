@@ -22,13 +22,8 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 		return getLabels(ctx, q, labelDBUrl, originalJobLabel)
 	}
 
-	maximumStep := int64(math.Ceil(float64(q.Hints.StepMs) / float64(1000)))
-	if maximumStep == 0 {
-		maximumStep = 1 // q.Hints.StepMs == 0 in some query...
-	}
-
 	// get time series from recent time range
-	result, err := runCloudWatchQuery(ctx, debugMode, q, labelDBUrl, maximumStep, lookbackDelta)
+	result, err := runCloudWatchQuery(ctx, debugMode, q, labelDBUrl, lookbackDelta)
 	if err != nil {
 		return result, err
 	}
@@ -46,7 +41,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 	return result, nil
 }
 
-func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, labelDBUrl string, maximumStep int64, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, labelDBUrl string, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	// index doesn't have statistics label, get label matchers without statistics
@@ -61,6 +56,11 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, la
 	matchers, err := fromLabelMatchers(mm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate internal query")
+	}
+
+	maximumStep := int64(math.Ceil(float64(q.Hints.StepMs) / float64(1000)))
+	if maximumStep == 0 {
+		maximumStep = 1 // q.Hints.StepMs == 0 in some query...
 	}
 
 	if debugMode {
