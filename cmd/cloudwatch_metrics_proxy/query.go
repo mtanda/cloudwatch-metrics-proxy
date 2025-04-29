@@ -27,25 +27,15 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 	}
 
 	// get time series from recent time range
-	result, err := runCloudWatchQuery(ctx, debugMode, q, labelDBUrl)
+	result, err := runCloudWatchQuery(ctx, debugMode, q, labelDBUrl, originalJobLabel)
 	if err != nil {
 		return result, err
-	}
-
-	if originalJobLabel != "" {
-		for _, ts := range result {
-			ts.Labels = append(ts.Labels, prompb.Label{Name: "job", Value: originalJobLabel})
-		}
-	}
-
-	if debugMode {
-		slog.Info(fmt.Sprintf("Returned %d time series.", len(result)))
 	}
 
 	return result, nil
 }
 
-func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, labelDBUrl string) ([]*prompb.TimeSeries, error) {
+func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, labelDBUrl string, originalJobLabel string) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	// index doesn't have statistics label, get label matchers without statistics
@@ -86,9 +76,21 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, la
 	if debugMode {
 		slog.Info("dump query result", "result", fmt.Sprintf("%+v", result))
 	}
+
+	if originalJobLabel != "" {
+		for _, ts := range result {
+			ts.Labels = append(ts.Labels, prompb.Label{Name: "job", Value: originalJobLabel})
+		}
+	}
+
+	if debugMode {
+		slog.Info(fmt.Sprintf("Returned %d time series.", len(result)))
+	}
+
 	return result, nil
 }
 
+// get some labels from query, and remove them from matchers
 func parseQuery(q *prompb.Query) (string, bool, string, []*prompb.LabelMatcher) {
 	namespace := ""
 	debugMode := false
