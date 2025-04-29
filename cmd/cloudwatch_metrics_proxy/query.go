@@ -60,14 +60,20 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, la
 	if debugMode {
 		slog.Info("querying for CloudWatch", "query", fmt.Sprintf("%+v", q))
 	}
-	region, queries, err := cloudwatch.GetQuery(ctx, q, matchers, labelDBUrl, maximumStep)
+	cloudwatchClient, err := cloudwatch.New(labelDBUrl, maximumStep, PROMETHEUS_LOOKBACK_DELTA)
+	if err != nil {
+		slog.Error("failed to new client", "err", err)
+		return nil, fmt.Errorf("failed to new client")
+	}
+
+	region, queries, err := cloudwatchClient.GetQuery(ctx, q, matchers)
 	if err != nil {
 		slog.Error("failed to get query", "err", err)
 		return nil, fmt.Errorf("failed to generate internal query")
 	}
 
 	if region != "" && len(queries) > 0 {
-		result, err = cloudwatch.QueryCloudWatch(ctx, region, queries, q, PROMETHEUS_LOOKBACK_DELTA)
+		result, err = cloudwatchClient.QueryCloudWatch(ctx, region, queries, q)
 		if err != nil {
 			slog.Error("failed to execute query", "err", err, "query", queries)
 			return nil, fmt.Errorf("failed to get time series from CloudWatch")

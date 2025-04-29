@@ -39,15 +39,30 @@ func init() {
 	prometheus.MustRegister(cloudwatchApiCalls)
 }
 
-func GetQuery(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher, labelDBUrl string, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
-	region, queries, err := getQueryWithIndex(ctx, q, matchers, labelDBUrl, maximumStep)
+type CloudWatchClient struct {
+	labelDBUrl    string
+	maximumStep   int64
+	lookbackDelta time.Duration
+}
+
+func New(labelDBUrl string, maximumStep int64, lookbackDelta time.Duration) (*CloudWatchClient, error) {
+	return &CloudWatchClient{
+		labelDBUrl:    labelDBUrl,
+		maximumStep:   maximumStep,
+		lookbackDelta: lookbackDelta,
+	}, nil
+
+}
+
+func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+	region, queries, err := c.getQueryWithIndex(ctx, q, matchers)
 	if err != nil {
 		return region, queries, err
 	}
 
 	// if no queries are generated, try to get time series without index
 	if len(queries) == 0 {
-		region, queries, err = getQueryWithoutIndex(q, maximumStep)
+		region, queries, err = c.getQueryWithoutIndex(q)
 		if err != nil {
 			return region, queries, err
 		}
@@ -56,7 +71,7 @@ func GetQuery(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher, 
 	return region, queries, nil
 }
 
-func getQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) getQueryWithoutIndex(q *prompb.Query) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -89,7 +104,7 @@ func getQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudw
 				}
 				v = int64(d.Seconds())
 			}
-			maximumStep = int64(math.Max(float64(maximumStep), float64(60)))
+			maximumStep := int64(math.Max(float64(c.maximumStep), float64(60)))
 			if v < maximumStep {
 				v = maximumStep
 			}
@@ -120,7 +135,7 @@ func getQueryWithoutIndex(q *prompb.Query, maximumStep int64) (string, []*cloudw
 	return region, queries, nil
 }
 
-func getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher, labelDBUrl string, maximumStep int64) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -129,7 +144,7 @@ func getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.
 		// expand enough long period to match index
 		matchLabelsStartMs = time.Unix(q.Hints.EndMs/1000, 0).Add(-2*indexInterval).Unix() * 1000
 	}
-	matchedLabelsList, err := index.GetMatchedLabels(ctx, labelDBUrl, matchers, matchLabelsStartMs, q.Hints.EndMs/1000)
+	matchedLabelsList, err := index.GetMatchedLabels(ctx, c.labelDBUrl, matchers, matchLabelsStartMs, q.Hints.EndMs/1000)
 	if err != nil {
 		return region, queries, err
 	}
@@ -189,7 +204,7 @@ func getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.
 						}
 						v = int64(d.Seconds())
 					}
-					maximumStep = int64(math.Max(float64(maximumStep), float64(60)))
+					maximumStep := int64(math.Max(float64(c.maximumStep), float64(60)))
 					if v < maximumStep {
 						v = maximumStep
 					}
@@ -209,7 +224,7 @@ func getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.
 	return region, queries, nil
 }
 
-func QueryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+func (c *CloudWatchClient) QueryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	if !isSingleStatistic(queries) {
@@ -217,7 +232,7 @@ func QueryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.G
 			return result, fmt.Errorf("Too many concurrent queries")
 		}
 		for _, query := range queries {
-			cwResult, err := queryCloudWatchGetMetricStatistics(ctx, region, query, q, lookbackDelta)
+			cwResult, err := c.queryCloudWatchGetMetricStatistics(ctx, region, query, q)
 			if err != nil {
 				return result, err
 			}
@@ -229,7 +244,7 @@ func QueryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.G
 		}
 		for i := 0; i < len(queries); i += 70 {
 			e := int(math.Min(float64(i+70), float64(len(queries))))
-			cwResult, err := queryCloudWatchGetMetricData(ctx, region, queries[i:e], q, lookbackDelta)
+			cwResult, err := c.queryCloudWatchGetMetricData(ctx, region, queries[i:e], q)
 			if err != nil {
 				return result, err
 			}
@@ -239,7 +254,7 @@ func QueryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.G
 	return result, nil
 }
 
-func queryCloudWatchGetMetricStatistics(ctx context.Context, region string, query *cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Context, region string, query *cloudwatch.GetMetricStatisticsInput, q *prompb.Query) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 	svc, err := getClient(ctx, region)
 	if err != nil {
@@ -354,7 +369,7 @@ func queryCloudWatchGetMetricStatistics(ctx context.Context, region string, quer
 		}
 		lastTimestamp = *dp.Timestamp
 	}
-	if *query.Period > 60 && !lastTimestamp.IsZero() && lastTimestamp.Before(endTime) && lastTimestamp.Before(time.Now().UTC().Add(-lookbackDelta)) {
+	if *query.Period > 60 && !lastTimestamp.IsZero() && lastTimestamp.Before(endTime) && lastTimestamp.Before(time.Now().UTC().Add(-c.lookbackDelta)) {
 		for _, s := range paramStatistics {
 			ts := tsm[s]
 			ts.Samples = append(ts.Samples, prompb.Sample{Value: math.Float64frombits(prom_value.StaleNaN), Timestamp: (lastTimestamp.Unix() + int64(*query.Period)) * 1000})
@@ -368,7 +383,7 @@ func queryCloudWatchGetMetricStatistics(ctx context.Context, region string, quer
 	return result, nil
 }
 
-func queryCloudWatchGetMetricData(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 	svc, err := getClient(ctx, region)
 	if err != nil {
@@ -481,7 +496,7 @@ func queryCloudWatchGetMetricData(ctx context.Context, region string, queries []
 					}
 				} else if i == len(r.Timestamps) {
 					lastTimestamp := r.Timestamps[i]
-					if lastTimestamp.Before(*params.EndTime) && lastTimestamp.Before(time.Now().UTC().Add(-lookbackDelta)) {
+					if lastTimestamp.Before(*params.EndTime) && lastTimestamp.Before(time.Now().UTC().Add(-c.lookbackDelta)) {
 						ts.Samples = append(ts.Samples, prompb.Sample{Value: math.Float64frombits(prom_value.StaleNaN), Timestamp: (lastTimestamp.Unix() + int64(period)) * 1000})
 					}
 				}
