@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"log/slog"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -10,9 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-kit/kit/log/level"
-
-	"github.com/prometheus/common/promlog"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,19 +26,15 @@ func main() {
 	flag.StringVar(&cfg.labelDBUrl, "labeldb.address", "http://localhost:8080/", "Address of the label database.")
 	flag.Parse()
 
-	logLevel := promlog.AllowedLevel{}
-	logLevel.Set("info")
-	format := promlog.AllowedFormat{}
-	format.Set("json")
-	config := promlog.Config{Level: &logLevel, Format: &format}
-	logger := promlog.New(&config)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	slog.SetDefault(logger)
 
 	pctx, cancel := context.WithCancel(context.Background())
 	eg, ctx := errgroup.WithContext(pctx)
 
 	srv := &http.Server{Addr: cfg.listenAddr}
 	http.HandleFunc("/metrics", metricsHandler)
-	http.HandleFunc("/read", remoteReadHandler(ctx, &cfg, logger))
+	http.HandleFunc("/read", remoteReadHandler(ctx, &cfg))
 
 	term := make(chan os.Signal, 1)
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
@@ -51,22 +45,22 @@ func main() {
 	go func() {
 		select {
 		case <-term:
-			level.Warn(logger).Log("msg", "Received SIGTERM, exiting gracefully...")
+			slog.Warn("Received SIGTERM, exiting gracefully...")
 			cancel()
 			if err := eg.Wait(); err != nil {
-				level.Error(logger).Log("err", err)
+				slog.Error("failed to wait", "err", err)
 			}
 
 			ctxHttp, _ := context.WithTimeout(context.Background(), 60*time.Second)
 			if err := srv.Shutdown(ctxHttp); err != nil {
-				level.Error(logger).Log("err", err)
+				slog.Error("failed to shutdown", "err", err)
 			}
 		case <-pctx.Done():
 		}
 	}()
 
-	level.Info(logger).Log("msg", "Listening on "+cfg.listenAddr)
+	slog.Info("Listening on " + cfg.listenAddr)
 	if err := srv.ListenAndServe(); err != nil {
-		level.Error(logger).Log("err", err)
+		slog.Error("failed to listen and serve", "err", err)
 	}
 }

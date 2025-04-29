@@ -7,7 +7,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.0
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.0
 	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.33.0
-	github.com/go-kit/kit v0.13.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/snappy v0.0.4
 	github.com/prometheus/client_golang v1.18.0
@@ -31,8 +30,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/go-kit/log v0.2.1 // indirect
-	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/grafana/regexp v0.0.0-20221122212121-6b5c0a4cb7fd // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/kr/text v0.2.0 // indirect

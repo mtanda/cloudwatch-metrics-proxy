@@ -3,18 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"github.com/mtanda/cloudwatch_metrics_proxy/internal/cloudwatch"
 	"github.com/mtanda/cloudwatch_metrics_proxy/internal/index"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 )
 
-func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackDelta time.Duration, logger log.Logger) ([]*prompb.TimeSeries, error) {
+func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
 	namespace, debugMode, originalJobLabel, matchers := parseQuery(q)
 	q.Matchers = matchers
 
@@ -29,7 +28,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 	}
 
 	// get time series from recent time range
-	result, err := runCloudWatchQuery(ctx, debugMode, logger, q, labelDBUrl, maximumStep, lookbackDelta)
+	result, err := runCloudWatchQuery(ctx, debugMode, q, labelDBUrl, maximumStep, lookbackDelta)
 	if err != nil {
 		return result, err
 	}
@@ -41,13 +40,13 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 	}
 
 	if debugMode {
-		level.Info(logger).Log("msg", fmt.Sprintf("Returned %d time series.", len(result)))
+		slog.Info(fmt.Sprintf("Returned %d time series.", len(result)))
 	}
 
 	return result, nil
 }
 
-func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, q *prompb.Query, labelDBUrl string, maximumStep int64, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, labelDBUrl string, maximumStep int64, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	// index doesn't have statistics label, get label matchers without statistics
@@ -65,23 +64,23 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, logger log.Logger, 
 	}
 
 	if debugMode {
-		level.Info(logger).Log("msg", "querying for CloudWatch", "query", fmt.Sprintf("%+v", q))
+		slog.Info("querying for CloudWatch", "query", fmt.Sprintf("%+v", q))
 	}
 	region, queries, err := cloudwatch.GetQuery(ctx, q, matchers, labelDBUrl, maximumStep)
 	if err != nil {
-		level.Error(logger).Log("err", err)
+		slog.Error("failed to get query", "err", err)
 		return nil, fmt.Errorf("failed to generate internal query")
 	}
 
 	if region != "" && len(queries) > 0 {
 		result, err = cloudwatch.QueryCloudWatch(ctx, region, queries, q, lookbackDelta)
 		if err != nil {
-			level.Error(logger).Log("err", err, "query", queries)
+			slog.Error("failed to execute query", "err", err, "query", queries)
 			return nil, fmt.Errorf("failed to get time series from CloudWatch")
 		}
 	}
 	if debugMode {
-		level.Info(logger).Log("msg", "dump query result", "result", fmt.Sprintf("%+v", result))
+		slog.Info("dump query result", "result", fmt.Sprintf("%+v", result))
 	}
 	return result, nil
 }

@@ -8,7 +8,6 @@ import (
 	_ "net/http/pprof"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/prometheus/client_golang/prometheus"
@@ -20,7 +19,7 @@ const (
 	PROMETHEUS_LOOKBACK_DELTA = 5 * time.Minute
 )
 
-func remoteReadHandler(ctx context.Context, cfg *adapterConfig, logger log.Logger) http.HandlerFunc {
+func remoteReadHandler(ctx context.Context, cfg *adapterConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		compressed, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -45,7 +44,7 @@ func remoteReadHandler(ctx context.Context, cfg *adapterConfig, logger log.Logge
 			return
 		}
 
-		timeSeries, err := runQuery(ctx, req.Queries[0], cfg.labelDBUrl, PROMETHEUS_LOOKBACK_DELTA, logger)
+		timeSeries, err := runQuery(ctx, req.Queries[0], cfg.labelDBUrl, PROMETHEUS_LOOKBACK_DELTA)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
