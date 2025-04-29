@@ -41,7 +41,7 @@ func TestGetMatchedLabels(t *testing.T) {
 	}
 	start := time.Now().Add(-time.Hour).Unix()
 	end := time.Now().Unix()
-	matchedLabels, err := getMatchedLabels(context.Background(), server.URL, matchers, start, end)
+	matchedLabels, err := GetMatchedLabels(context.Background(), server.URL, matchers, start, end)
 
 	assert.NoError(t, err)
 	assert.Len(t, matchedLabels, 2)
