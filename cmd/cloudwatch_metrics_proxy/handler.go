@@ -5,17 +5,12 @@ import (
 	"io"
 	"net/http"
 	_ "net/http/pprof"
-	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/prometheus/prompb"
-)
-
-const (
-	PROMETHEUS_LOOKBACK_DELTA = 5 * time.Minute
 )
 
 func remoteReadHandler(ctx context.Context, cfg *adapterConfig) http.HandlerFunc {
@@ -43,7 +38,7 @@ func remoteReadHandler(ctx context.Context, cfg *adapterConfig) http.HandlerFunc
 			return
 		}
 
-		timeSeries, err := runQuery(ctx, req.Queries[0], cfg.labelDBUrl, PROMETHEUS_LOOKBACK_DELTA)
+		timeSeries, err := runQuery(ctx, req.Queries[0], cfg.labelDBUrl)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

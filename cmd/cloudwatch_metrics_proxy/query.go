@@ -13,7 +13,11 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 )
 
-func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+const (
+	PROMETHEUS_LOOKBACK_DELTA = 5 * time.Minute
+)
+
+func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*prompb.TimeSeries, error) {
 	namespace, debugMode, originalJobLabel, matchers := parseQuery(q)
 	q.Matchers = matchers
 
@@ -23,7 +27,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 	}
 
 	// get time series from recent time range
-	result, err := runCloudWatchQuery(ctx, debugMode, q, labelDBUrl, lookbackDelta)
+	result, err := runCloudWatchQuery(ctx, debugMode, q, labelDBUrl)
 	if err != nil {
 		return result, err
 	}
@@ -41,7 +45,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string, lookbackD
 	return result, nil
 }
 
-func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, labelDBUrl string, lookbackDelta time.Duration) ([]*prompb.TimeSeries, error) {
+func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, labelDBUrl string) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	// index doesn't have statistics label, get label matchers without statistics
@@ -73,7 +77,7 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, la
 	}
 
 	if region != "" && len(queries) > 0 {
-		result, err = cloudwatch.QueryCloudWatch(ctx, region, queries, q, lookbackDelta)
+		result, err = cloudwatch.QueryCloudWatch(ctx, region, queries, q, PROMETHEUS_LOOKBACK_DELTA)
 		if err != nil {
 			slog.Error("failed to execute query", "err", err, "query", queries)
 			return nil, fmt.Errorf("failed to get time series from CloudWatch")
