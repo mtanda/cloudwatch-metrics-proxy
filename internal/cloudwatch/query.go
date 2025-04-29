@@ -124,14 +124,12 @@ func getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
-	iq := *q
-	iq.Hints = &prompb.ReadHints{}
-	*iq.Hints = *q.Hints
+	matchLabelsStartMs := q.Hints.StartMs
 	if time.Unix(q.Hints.EndMs/1000, 0).Sub(time.Unix(q.Hints.StartMs/1000, 0)) < 2*indexInterval {
 		// expand enough long period to match index
-		iq.Hints.StartMs = time.Unix(q.Hints.EndMs/1000, 0).Add(-2*indexInterval).Unix() * 1000
+		matchLabelsStartMs = time.Unix(q.Hints.EndMs/1000, 0).Add(-2*indexInterval).Unix() * 1000
 	}
-	matchedLabelsList, err := index.GetMatchedLabels(ctx, labelDBUrl, matchers, iq.Hints.StartMs/1000, q.Hints.EndMs/1000)
+	matchedLabelsList, err := index.GetMatchedLabels(ctx, labelDBUrl, matchers, matchLabelsStartMs, q.Hints.EndMs/1000)
 	if err != nil {
 		return region, queries, err
 	}
