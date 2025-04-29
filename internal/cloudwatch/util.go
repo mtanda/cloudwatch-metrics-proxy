@@ -130,7 +130,6 @@ func parseQueryParams(matchers []*prompb.LabelMatcher, maximumStep int64) ([]typ
 
 		switch m.Name {
 		case "Statistic":
-			statistics = make([]types.Statistic, 0)
 			for _, s := range ss {
 				statistics = append(statistics, types.Statistic(s))
 			}
