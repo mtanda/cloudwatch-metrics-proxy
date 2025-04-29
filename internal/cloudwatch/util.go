@@ -6,12 +6,15 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/prompb"
 )
@@ -108,6 +111,51 @@ func fromLabelMatchers(matchers []*prompb.LabelMatcher) ([]*labels.Matcher, erro
 		result = append(result, m)
 	}
 	return result, nil
+}
+
+func parseQueryParams(matchers []*prompb.LabelMatcher, maximumStep int64) ([]types.Statistic, []string, int32, error) {
+	statistics := make([]types.Statistic, 0)
+	extendedStatistics := make([]string, 0)
+	period := int32(0)
+
+	for _, m := range matchers {
+		if !(m.Type == prompb.LabelMatcher_EQ || m.Type == prompb.LabelMatcher_RE) {
+			continue // only support equal matcher or regex matcher with alternation
+		}
+
+		ss := make([]string, 0)
+		for _, s := range strings.Split(m.Value, "|") {
+			ss = append(ss, s)
+		}
+
+		switch m.Name {
+		case "Statistic":
+			statistics = make([]types.Statistic, 0)
+			for _, s := range ss {
+				statistics = append(statistics, types.Statistic(s))
+			}
+		case "ExtendedStatistic":
+			extendedStatistics = append(extendedStatistics, ss...)
+		case "Period":
+			if m.Type == prompb.LabelMatcher_EQ {
+				v, err := strconv.ParseInt(m.Value, 10, 64)
+				if err != nil {
+					d, err := time.ParseDuration(m.Value)
+					if err != nil {
+						return nil, nil, 0, err
+					}
+					v = int64(d.Seconds())
+				}
+				maximumStep = int64(math.Max(float64(maximumStep), float64(60)))
+				if v < maximumStep {
+					v = maximumStep
+				}
+				period = int32(v)
+			}
+		}
+	}
+
+	return statistics, extendedStatistics, period, nil
 }
 
 var regionCache = ""

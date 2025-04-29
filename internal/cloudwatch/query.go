@@ -6,7 +6,6 @@ import (
 	"math"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -59,11 +58,13 @@ func New(labelDBUrl string, maximumStep int64, lookbackDelta time.Duration, read
 func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	// index doesn't have statistics label, get label matchers without statistics
 	mm := make([]*prompb.LabelMatcher, 0)
+	ms := make([]*prompb.LabelMatcher, 0)
 	for _, m := range q.Matchers {
 		if m.Name == "Statistic" || m.Name == "ExtendedStatistic" || m.Name == "Period" {
-			continue
+			ms = append(ms, m)
+		} else {
+			mm = append(mm, m)
 		}
-		mm = append(mm, m)
 	}
 
 	matchers, err := fromLabelMatchers(mm)
@@ -71,14 +72,19 @@ func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query) (strin
 		return "", nil, err
 	}
 
-	region, queries, err := c.getQueryWithIndex(ctx, q, matchers)
+	stat, eStat, period, err := parseQueryParams(ms, c.maximumStep)
+	if err != nil {
+		return "", nil, err
+	}
+
+	region, queries, err := c.getQueryWithIndex(ctx, matchers, stat, eStat, period)
 	if err != nil {
 		return "", nil, err
 	}
 
 	// if no queries are generated, try to get time series without index
 	if len(queries) == 0 {
-		region, queries, err = c.getQueryWithoutIndex(q, matchers)
+		region, queries, err = c.getQueryWithoutIndex(matchers, stat, eStat, period)
 		if err != nil {
 			return "", nil, err
 		}
@@ -87,7 +93,7 @@ func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query) (strin
 	return region, queries, nil
 }
 
-func (c *CloudWatchClient) getQueryWithoutIndex(q *prompb.Query, matchers []*labels.Matcher) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) getQueryWithoutIndex(matchers []*labels.Matcher, stat []types.Statistic, eStat []string, period int32) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -119,27 +125,14 @@ func (c *CloudWatchClient) getQueryWithoutIndex(q *prompb.Query, matchers []*lab
 			query.MetricName = aws.String(oldMetricName) // backward compatibility
 		}
 	}
-	for _, m := range q.Matchers {
-		switch m.Name {
-		case "Statistic":
-			query.Statistics = []types.Statistic{types.Statistic(m.Value)}
-		case "ExtendedStatistic":
-			query.ExtendedStatistics = []string{m.Value}
-		case "Period":
-			v, err := strconv.ParseInt(m.Value, 10, 64)
-			if err != nil {
-				d, err := time.ParseDuration(m.Value)
-				if err != nil {
-					return region, queries, err
-				}
-				v = int64(d.Seconds())
-			}
-			maximumStep := int64(math.Max(float64(c.maximumStep), float64(60)))
-			if v < maximumStep {
-				v = maximumStep
-			}
-			query.Period = aws.Int32(int32(v))
-		}
+	if len(stat) > 0 {
+		query.Statistics = stat
+	}
+	if len(eStat) > 0 {
+		query.ExtendedStatistics = eStat
+	}
+	if period != 0 {
+		query.Period = aws.Int32(period)
 	}
 	query.StartTime = aws.Time(time.Unix(int64(c.readHints.StartMs/1000), int64(c.readHints.StartMs%1000*1000)))
 	query.EndTime = aws.Time(time.Unix(int64(c.readHints.EndMs/1000), int64(c.readHints.EndMs%1000*1000)))
@@ -155,7 +148,7 @@ func (c *CloudWatchClient) getQueryWithoutIndex(q *prompb.Query, matchers []*lab
 	return region, queries, nil
 }
 
-func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, q *prompb.Query, matchers []*labels.Matcher) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*labels.Matcher, stat []types.Statistic, eStat []string, period int32) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -198,39 +191,14 @@ func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, q *prompb.Quer
 				query.MetricName = aws.String(oldMetricName) // backward compatibility
 			}
 		}
-		for _, m := range q.Matchers {
-			if !(m.Type == prompb.LabelMatcher_EQ || m.Type == prompb.LabelMatcher_RE) {
-				continue // only support equal matcher or regex matcher with alternation
-			}
-			statistics := make([]string, 0)
-			for _, s := range strings.Split(m.Value, "|") {
-				statistics = append(statistics, s)
-			}
-			switch m.Name {
-			case "Statistic":
-				query.Statistics = make([]types.Statistic, 0)
-				for _, s := range statistics {
-					query.Statistics = append(query.Statistics, types.Statistic(s))
-				}
-			case "ExtendedStatistic":
-				query.ExtendedStatistics = statistics
-			case "Period":
-				if m.Type == prompb.LabelMatcher_EQ {
-					v, err := strconv.ParseInt(m.Value, 10, 64)
-					if err != nil {
-						d, err := time.ParseDuration(m.Value)
-						if err != nil {
-							return region, queries, err
-						}
-						v = int64(d.Seconds())
-					}
-					maximumStep := int64(math.Max(float64(c.maximumStep), float64(60)))
-					if v < maximumStep {
-						v = maximumStep
-					}
-					query.Period = aws.Int32(int32(v))
-				}
-			}
+		if len(stat) > 0 {
+			query.Statistics = stat
+		}
+		if len(eStat) > 0 {
+			query.ExtendedStatistics = eStat
+		}
+		if period != 0 {
+			query.Period = aws.Int32(period)
 		}
 		if len(query.Statistics) == 0 && len(query.ExtendedStatistics) == 0 {
 			query.Statistics = []types.Statistic{types.Statistic("Sum"), types.Statistic("SampleCount"), types.Statistic("Maximum"), types.Statistic("Minimum"), types.Statistic("Average")}
