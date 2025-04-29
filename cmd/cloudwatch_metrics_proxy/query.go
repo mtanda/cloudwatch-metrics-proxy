@@ -60,7 +60,7 @@ func runCloudWatchQuery(ctx context.Context, debugMode bool, q *prompb.Query, la
 	if debugMode {
 		slog.Info("querying for CloudWatch", "query", fmt.Sprintf("%+v", q))
 	}
-	cloudwatchClient, err := cloudwatch.New(labelDBUrl, maximumStep, PROMETHEUS_LOOKBACK_DELTA)
+	cloudwatchClient, err := cloudwatch.New(labelDBUrl, maximumStep, PROMETHEUS_LOOKBACK_DELTA, *q.Hints)
 	if err != nil {
 		slog.Error("failed to new client", "err", err)
 		return nil, fmt.Errorf("failed to new client")
