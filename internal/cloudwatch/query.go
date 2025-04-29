@@ -157,7 +157,7 @@ func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*la
 		// expand enough long period to match index
 		matchLabelsStartMs = time.Unix(c.readHints.EndMs/1000, 0).Add(-2*indexInterval).Unix() * 1000
 	}
-	matchedLabelsList, err := index.GetMatchedLabels(ctx, c.labelDBUrl, matchers, matchLabelsStartMs, c.readHints.EndMs/1000)
+	matchedLabelsList, err := index.GetMatchedLabels(ctx, c.labelDBUrl, matchers, matchLabelsStartMs/1000, c.readHints.EndMs/1000)
 	if err != nil {
 		return region, queries, err
 	}
