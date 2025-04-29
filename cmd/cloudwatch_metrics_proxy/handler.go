@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
@@ -13,6 +14,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/prometheus/prompb"
+)
+
+const (
+	PROMETHEUS_LOOKBACK_DELTA = 5 * time.Minute
 )
 
 func remoteReadHandler(ctx context.Context, cfg *adapterConfig, logger log.Logger) http.HandlerFunc {

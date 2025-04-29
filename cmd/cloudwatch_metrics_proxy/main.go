@@ -16,10 +16,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	PROMETHEUS_LOOKBACK_DELTA = 5 * time.Minute
-)
-
 type adapterConfig struct {
 	listenAddr string
 	labelDBUrl string
