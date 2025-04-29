@@ -227,6 +227,7 @@ func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, q *prompb.Quer
 func (c *CloudWatchClient) QueryCloudWatch(ctx context.Context, region string, queries []*cloudwatch.GetMetricStatisticsInput, q *prompb.Query) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
+	// switch to GetMetricData if the query is not single statistic
 	if !isSingleStatistic(queries) {
 		if len(queries) > 200 {
 			return result, fmt.Errorf("Too many concurrent queries")
@@ -363,12 +364,15 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Contex
 			}
 			ts := tsm[s]
 			if *query.Period > 60 && !lastTimestamp.IsZero() && lastTimestamp.Add(time.Duration(*query.Period)*time.Second).Before(*dp.Timestamp) {
+				// set stale NaN at gap
 				ts.Samples = append(ts.Samples, prompb.Sample{Value: math.Float64frombits(prom_value.StaleNaN), Timestamp: (lastTimestamp.Unix() + int64(*query.Period)) * 1000})
 			}
 			ts.Samples = append(ts.Samples, prompb.Sample{Value: value, Timestamp: dp.Timestamp.Unix() * 1000})
 		}
 		lastTimestamp = *dp.Timestamp
 	}
+
+	// set stale NaN at the end
 	if *query.Period > 60 && !lastTimestamp.IsZero() && lastTimestamp.Before(endTime) && lastTimestamp.Before(time.Now().UTC().Add(-c.lookbackDelta)) {
 		for _, s := range paramStatistics {
 			ts := tsm[s]
@@ -452,6 +456,7 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 		return result, fmt.Errorf("exceed maximum datapoints")
 	}
 
+	// set labels to result
 	tsm := make(map[string]*prompb.TimeSeries)
 	for _, r := range params.MetricDataQueries {
 		ts := &prompb.TimeSeries{}
@@ -470,6 +475,7 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 		tsm[*r.Id] = ts
 	}
 
+	// get metrics data and set it to result
 	nextToken := ""
 	for {
 		if nextToken != "" {
@@ -489,12 +495,15 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 				if period <= 60 {
 					continue
 				}
+
 				if i != len(r.Timestamps) && i != 0 {
+					// set stale NaN at gap
 					lastTimestamp := r.Timestamps[i-1]
 					if lastTimestamp.Add(time.Duration(period) * time.Second).Before(r.Timestamps[i]) {
 						ts.Samples = append(ts.Samples, prompb.Sample{Value: math.Float64frombits(prom_value.StaleNaN), Timestamp: (lastTimestamp.Unix() + int64(period)) * 1000})
 					}
 				} else if i == len(r.Timestamps) {
+					// set stale NaN at the end
 					lastTimestamp := r.Timestamps[i]
 					if lastTimestamp.Before(*params.EndTime) && lastTimestamp.Before(time.Now().UTC().Add(-c.lookbackDelta)) {
 						ts.Samples = append(ts.Samples, prompb.Sample{Value: math.Float64frombits(prom_value.StaleNaN), Timestamp: (lastTimestamp.Unix() + int64(period)) * 1000})
