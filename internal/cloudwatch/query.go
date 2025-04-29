@@ -513,7 +513,31 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 	return result, nil
 }
 
-func (c *CloudWatchClient) GetLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string) ([]*prompb.TimeSeries, error) {
+func (c *CloudWatchClient) QueryPeriod(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string) ([]*prompb.TimeSeries, error) {
+	var result []*prompb.TimeSeries
+
+	startTime := time.Unix(int64(q.Hints.StartMs/1000), int64(q.Hints.StartMs%1000*1000))
+	endTime := time.Unix(int64(q.Hints.EndMs/1000), int64(q.Hints.EndMs%1000*1000))
+	periodUnit := calibratePeriod(startTime)
+	period := calcQueryPeriod(startTime, endTime, periodUnit)
+	startTime = startTime.Truncate(time.Duration(*period) * time.Second)
+	endTime = endTime.Truncate(time.Duration(*period) * time.Second).Add(time.Duration(*period) * time.Second)
+
+	ts := &prompb.TimeSeries{}
+	ts.Labels = append(ts.Labels, prompb.Label{Name: "job", Value: originalJobLabel})
+	ts.Labels = append(ts.Labels, prompb.Label{Name: "__name__", Value: "Period"})
+
+	t := startTime
+	for t.Before(endTime) {
+		ts.Samples = append(ts.Samples, prompb.Sample{Value: float64(*period), Timestamp: t.Unix() * 1000})
+		t = t.Add(time.Duration(*period) * time.Second)
+	}
+	result = append(result, ts)
+
+	return result, nil
+}
+
+func (c *CloudWatchClient) QueryLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	m, err := parseQueryMatchers(q.Matchers)

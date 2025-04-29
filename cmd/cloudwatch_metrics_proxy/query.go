@@ -17,7 +17,7 @@ const (
 )
 
 func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*prompb.TimeSeries, error) {
-	namespace, debugMode, originalJobLabel, matchers := parseQuery(q)
+	namespace, debugMode, originalJobLabel, metricName, matchers := parseQuery(q)
 	q.Matchers = matchers
 
 	maximumStep := int64(math.Ceil(float64(q.Hints.StepMs) / float64(1000)))
@@ -28,9 +28,14 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 	ldb := index.New(labelDBUrl)
 	cloudwatchClient := cloudwatch.New(ldb, maximumStep, PROMETHEUS_LOOKBACK_DELTA, *q.Hints)
 
+	// return calculated period
+	if metricName == "Period" {
+		return cloudwatchClient.QueryPeriod(ctx, q, labelDBUrl, originalJobLabel)
+	}
+
 	// return label name/value list for query editor
 	if namespace == "" || q.Hints == nil {
-		return cloudwatchClient.GetLabels(ctx, q, labelDBUrl, originalJobLabel)
+		return cloudwatchClient.QueryLabels(ctx, q, labelDBUrl, originalJobLabel)
 	}
 
 	// get time series from recent time range
@@ -80,10 +85,11 @@ func runCloudWatchQuery(ctx context.Context, cloudwatchClient *cloudwatch.CloudW
 }
 
 // get some labels from query, and remove them from matchers
-func parseQuery(q *prompb.Query) (string, bool, string, []*prompb.LabelMatcher) {
+func parseQuery(q *prompb.Query) (string, bool, string, string, []*prompb.LabelMatcher) {
 	namespace := ""
 	debugMode := false
 	originalJobLabel := ""
+	metricName := ""
 	matchers := make([]*prompb.LabelMatcher, 0)
 	for _, m := range q.Matchers {
 		if m.Type == prompb.LabelMatcher_EQ && m.Name == "job" {
@@ -97,7 +103,10 @@ func parseQuery(q *prompb.Query) (string, bool, string, []*prompb.LabelMatcher) 
 		if m.Type == prompb.LabelMatcher_EQ && m.Name == "Namespace" {
 			namespace = m.Value
 		}
+		if m.Type == prompb.LabelMatcher_EQ && m.Name == "__name__" {
+			metricName = m.Value
+		}
 		matchers = append(matchers, m)
 	}
-	return namespace, debugMode, originalJobLabel, matchers
+	return namespace, debugMode, originalJobLabel, metricName, matchers
 }
