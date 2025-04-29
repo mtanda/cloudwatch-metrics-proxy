@@ -200,6 +200,7 @@ func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*la
 		if period != 0 {
 			query.Period = aws.Int32(period)
 		}
+		// set default statistics
 		if len(query.Statistics) == 0 && len(query.ExtendedStatistics) == 0 {
 			query.Statistics = []types.Statistic{types.Statistic("Sum"), types.Statistic("SampleCount"), types.Statistic("Maximum"), types.Statistic("Minimum"), types.Statistic("Average")}
 			query.ExtendedStatistics = []string{"p50.00", "p90.00", "p95.00", "p99.00"}
