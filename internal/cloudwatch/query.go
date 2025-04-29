@@ -518,11 +518,11 @@ func (c *CloudWatchClient) GetLabels(ctx context.Context, q *prompb.Query, label
 
 	m, err := parseQueryMatchers(q.Matchers)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate internal query")
+		return nil, err
 	}
 	matchedLabelsList, err := index.GetMatchedLabels(ctx, labelDBUrl, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate internal query")
+		return nil, err
 	}
 	for _, matchedLabels := range matchedLabelsList {
 		ts := &prompb.TimeSeries{}
