@@ -97,12 +97,12 @@ func (c *CloudWatchClient) getQueryWithoutIndex(matchers []*labels.Matcher, stat
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
 	query := &cloudwatch.GetMetricStatisticsInput{}
+	oldMetricName := ""
 	for _, m := range matchers {
 		if m.Type != labels.MatchEqual {
 			continue // only support equal matcher
 		}
 
-		oldMetricName := ""
 		switch m.Name {
 		case "__name__":
 			oldMetricName = m.Value
@@ -120,9 +120,9 @@ func (c *CloudWatchClient) getQueryWithoutIndex(matchers []*labels.Matcher, stat
 				})
 			}
 		}
-		if query.MetricName == nil {
-			query.MetricName = aws.String(oldMetricName) // backward compatibility
-		}
+	}
+	if query.MetricName == nil {
+		query.MetricName = aws.String(oldMetricName) // backward compatibility
 	}
 	if len(stat) > 0 {
 		query.Statistics = stat
