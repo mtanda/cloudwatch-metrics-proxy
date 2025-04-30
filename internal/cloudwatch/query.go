@@ -324,6 +324,10 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Contex
 		tsm[s] = ts
 	}
 
+	if resp == nil {
+		return result, nil
+	}
+
 	sort.Slice(resp.Datapoints, func(i, j int) bool {
 		return resp.Datapoints[i].Timestamp.Before(*resp.Datapoints[j].Timestamp)
 	})
