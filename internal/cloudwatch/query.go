@@ -448,6 +448,11 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 		return result, fmt.Errorf("exceed maximum datapoints")
 	}
 
+	// assert time range...
+	if !params.StartTime.Before(*params.EndTime) {
+		return result, fmt.Errorf("invalid time range")
+	}
+
 	// set labels to result
 	tsm := make(map[string]*prompb.TimeSeries)
 	for _, r := range params.MetricDataQueries {
