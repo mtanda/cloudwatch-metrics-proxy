@@ -35,6 +35,8 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 
 	// return label name/value list for query editor
 	if namespace == "" || q.Hints == nil {
+		// this is not worked now
+		// https://github.com/prometheus/prometheus/issues/3351
 		return cloudwatchClient.QueryLabels(ctx, q, labelDBUrl, originalJobLabel)
 	}
 
