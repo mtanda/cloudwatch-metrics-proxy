@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	_ "net/http/pprof"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
@@ -15,6 +17,15 @@ import (
 
 func remoteReadHandler(ctx context.Context, cfg *adapterConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		var req prompb.ReadRequest
+
+		// log request
+		now := time.Now().UTC()
+		isSuccess := false
+		defer func() {
+			slog.Info("querying CloudWatch metrics", "request", req, "durationMs", time.Since(now).Seconds()*1000, "status", isSuccess)
+		}()
+
 		compressed, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -27,7 +38,6 @@ func remoteReadHandler(ctx context.Context, cfg *adapterConfig) http.HandlerFunc
 			return
 		}
 
-		var req prompb.ReadRequest
 		if err := proto.Unmarshal(reqBuf, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -54,6 +64,7 @@ func remoteReadHandler(ctx context.Context, cfg *adapterConfig) http.HandlerFunc
 			return
 		}
 
+		isSuccess = true
 		w.Header().Set("Content-Type", "application/x-protobuf")
 		if _, err := w.Write(snappy.Encode(nil, data)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
