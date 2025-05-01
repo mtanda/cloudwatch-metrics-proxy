@@ -41,7 +41,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 	}
 
 	// get time series from recent time range
-	result, err := runCloudWatchQuery(ctx, cloudwatchClient, debugMode, q, labelDBUrl, originalJobLabel)
+	result, err := runCloudWatchQuery(ctx, cloudwatchClient, debugMode, q, originalJobLabel)
 	if err != nil {
 		return result, err
 	}
@@ -49,7 +49,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 	return result, nil
 }
 
-func runCloudWatchQuery(ctx context.Context, cloudwatchClient *cloudwatch.CloudWatchClient, debugMode bool, q *prompb.Query, labelDBUrl string, originalJobLabel string) ([]*prompb.TimeSeries, error) {
+func runCloudWatchQuery(ctx context.Context, cloudwatchClient *cloudwatch.CloudWatchClient, debugMode bool, q *prompb.Query, originalJobLabel string) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	if debugMode {
