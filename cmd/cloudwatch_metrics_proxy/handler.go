@@ -23,7 +23,7 @@ func remoteReadHandler(ctx context.Context, cfg *adapterConfig) http.HandlerFunc
 		now := time.Now().UTC()
 		isSuccess := false
 		defer func() {
-			slog.Info("querying CloudWatch metrics", "request", req, "durationMs", time.Since(now).Seconds()*1000, "status", isSuccess)
+			slog.Info("request log", "request", req, "durationMs", time.Since(now).Seconds()*1000, "status", isSuccess)
 		}()
 
 		compressed, err := io.ReadAll(r.Body)

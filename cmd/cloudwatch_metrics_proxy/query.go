@@ -53,7 +53,7 @@ func runCloudWatchQuery(ctx context.Context, cloudwatchClient *cloudwatch.CloudW
 	var result []*prompb.TimeSeries
 
 	if debugMode {
-		slog.Info("querying for CloudWatch", "query", fmt.Sprintf("%+v", q))
+		slog.Info("[debug] query dump", "query", q)
 	}
 
 	region, queries, err := cloudwatchClient.GetQuery(ctx, q, debugMode)
@@ -70,17 +70,13 @@ func runCloudWatchQuery(ctx context.Context, cloudwatchClient *cloudwatch.CloudW
 		}
 	}
 	if debugMode {
-		slog.Info("dump query result", "result", fmt.Sprintf("%+v", result))
+		slog.Info("[debug] query result", "result", result, "count", len(result))
 	}
 
 	if originalJobLabel != "" {
 		for _, ts := range result {
 			ts.Labels = append(ts.Labels, prompb.Label{Name: "job", Value: originalJobLabel})
 		}
-	}
-
-	if debugMode {
-		slog.Info(fmt.Sprintf("Returned %d time series.", len(result)))
 	}
 
 	return result, nil
