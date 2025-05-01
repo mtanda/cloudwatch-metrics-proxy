@@ -33,7 +33,7 @@ func New(url string) *LabelDBClient {
 	}
 }
 
-func (l *LabelDBClient) GetMatchedLabels(ctx context.Context, matchers []*labels.Matcher, start int64, end int64) ([]labels.Labels, error) {
+func (l *LabelDBClient) GetMatchedLabels(ctx context.Context, matchers []*labels.Matcher, start int64, end int64, debugMode bool) ([]labels.Labels, error) {
 	httpClient := &http.Client{}
 	req, err := http.NewRequest("GET", l.url+"/api/v1/series", nil)
 	if err != nil {
@@ -54,6 +54,9 @@ func (l *LabelDBClient) GetMatchedLabels(ctx context.Context, matchers []*labels
 	q.Add("start", strconv.FormatInt(start, 10))
 	q.Add("end", strconv.FormatInt(end, 10))
 	q.Add("limit", strconv.FormatInt(seriesLimit, 10))
+	if debugMode {
+		q.Add("debug", "true")
+	}
 	req.URL.RawQuery = q.Encode()
 
 	resp, err := httpClient.Do(req)

@@ -54,7 +54,7 @@ func New(ldb *index.LabelDBClient, maximumStep int64, lookbackDelta time.Duratio
 	}
 }
 
-func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query, debugMode bool) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	// index doesn't have statistics label, get label matchers without statistics
 	mm := make([]*prompb.LabelMatcher, 0)
 	ms := make([]*prompb.LabelMatcher, 0)
@@ -76,7 +76,7 @@ func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query) (strin
 		return "", nil, err
 	}
 
-	region, queries, err := c.getQueryWithIndex(ctx, matchers, stat, eStat, period)
+	region, queries, err := c.getQueryWithIndex(ctx, matchers, stat, eStat, period, debugMode)
 	if err != nil {
 		return "", nil, err
 	}
@@ -147,7 +147,7 @@ func (c *CloudWatchClient) getQueryWithoutIndex(matchers []*labels.Matcher, stat
 	return region, queries, nil
 }
 
-func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*labels.Matcher, stat []types.Statistic, eStat []string, period int32) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*labels.Matcher, stat []types.Statistic, eStat []string, period int32, debugMode bool) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -156,7 +156,7 @@ func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*la
 		// expand enough long period to match index
 		matchLabelsStartMs = time.Unix(c.readHints.EndMs/1000, 0).Add(-2*indexInterval).Unix() * 1000
 	}
-	matchedLabelsList, err := c.ldb.GetMatchedLabels(ctx, matchers, matchLabelsStartMs/1000, c.readHints.EndMs/1000)
+	matchedLabelsList, err := c.ldb.GetMatchedLabels(ctx, matchers, matchLabelsStartMs/1000, c.readHints.EndMs/1000, debugMode)
 	if err != nil {
 		return region, queries, err
 	}
@@ -546,14 +546,14 @@ func (c *CloudWatchClient) QueryPeriod(ctx context.Context, q *prompb.Query, lab
 	return result, nil
 }
 
-func (c *CloudWatchClient) QueryLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string) ([]*prompb.TimeSeries, error) {
+func (c *CloudWatchClient) QueryLabels(ctx context.Context, q *prompb.Query, labelDBUrl string, originalJobLabel string, debugMode bool) ([]*prompb.TimeSeries, error) {
 	var result []*prompb.TimeSeries
 
 	m, err := parseQueryMatchers(q.Matchers)
 	if err != nil {
 		return nil, err
 	}
-	matchedLabelsList, err := c.ldb.GetMatchedLabels(ctx, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000)
+	matchedLabelsList, err := c.ldb.GetMatchedLabels(ctx, m, q.StartTimestampMs/1000, q.EndTimestampMs/1000, debugMode)
 	if err != nil {
 		return nil, err
 	}

@@ -37,7 +37,7 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 	if namespace == "" || q.Hints == nil {
 		// this is not worked now
 		// https://github.com/prometheus/prometheus/issues/3351
-		return cloudwatchClient.QueryLabels(ctx, q, labelDBUrl, originalJobLabel)
+		return cloudwatchClient.QueryLabels(ctx, q, labelDBUrl, originalJobLabel, debugMode)
 	}
 
 	// get time series from recent time range
@@ -56,7 +56,7 @@ func runCloudWatchQuery(ctx context.Context, cloudwatchClient *cloudwatch.CloudW
 		slog.Info("querying for CloudWatch", "query", fmt.Sprintf("%+v", q))
 	}
 
-	region, queries, err := cloudwatchClient.GetQuery(ctx, q)
+	region, queries, err := cloudwatchClient.GetQuery(ctx, q, debugMode)
 	if err != nil {
 		slog.Error("failed to get query", "err", err)
 		return nil, fmt.Errorf("failed to generate internal query")
