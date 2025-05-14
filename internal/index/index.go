@@ -11,9 +11,7 @@ import (
 )
 
 const (
-	// https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/cloudwatch_limits.html
-	// GetMetricStatistics has a limit of 400 TPS per Region
-	seriesLimit = 400
+	seriesLimit = 1000
 )
 
 type Response struct {
