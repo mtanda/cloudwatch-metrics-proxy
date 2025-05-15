@@ -63,9 +63,13 @@ func isExtendedStatistics(s string) bool {
 	return s != "Sum" && s != "SampleCount" && s != "Maximum" && s != "Minimum" && s != "Average"
 }
 
-func calcQueryPeriod(startTime time.Time, endTime time.Time, periodUnit int32) int32 {
+func calcQueryPeriod(startTime time.Time, endTime time.Time, periodUnit int32, stepMs int64) int32 {
 	queryTimeRange := (endTime).Sub(startTime).Seconds()
-	period := int32(math.Ceil(queryTimeRange/1440/float64(periodUnit))) * periodUnit
+	requiredDatapoints := int32(math.Ceil(queryTimeRange / float64(stepMs/1000)))
+	if requiredDatapoints < 1 {
+		requiredDatapoints = 1
+	}
+	period := int32(math.Ceil(queryTimeRange/float64(requiredDatapoints)/float64(periodUnit))) * periodUnit
 	if period < periodUnit {
 		period = periodUnit
 	}

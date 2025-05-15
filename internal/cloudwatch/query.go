@@ -20,6 +20,7 @@ import (
 
 const (
 	PROMETHEUS_MAXIMUM_POINTS = 11000
+	CLOUDWATCH_MAXIMUM_POINTS = 1440
 	indexInterval             = time.Duration(60) * time.Minute // TODO: get from labels database
 )
 
@@ -52,6 +53,14 @@ func New(ldb *index.LabelDBClient, maximumStep int64, lookbackDelta time.Duratio
 		lookbackDelta: lookbackDelta,
 		readHints:     readHints,
 	}
+}
+
+func (c *CloudWatchClient) getStepMs() int64 {
+	if c.readHints.StepMs == 0 {
+		// this query might be instant query, just return one datapoint in 5 minutes (lookback delta)
+		return 300 * 1000
+	}
+	return c.readHints.StepMs
 }
 
 func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query, debugMode bool) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
@@ -267,10 +276,8 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Contex
 	query.EndTime = aws.Time(query.EndTime.Truncate(time.Duration(periodUnit)))
 
 	// auto calibrate period
-	highResolution := true
 	if query.Period == nil {
-		query.Period = aws.Int32(calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit))
-		highResolution = false
+		query.Period = aws.Int32(calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit, c.getStepMs()))
 	}
 
 	startTime := *query.StartTime
@@ -278,11 +285,7 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Contex
 	var resp *cloudwatch.GetMetricStatisticsOutput
 	for startTime.Before(endTime) {
 		query.StartTime = aws.Time(startTime)
-		if highResolution {
-			startTime = startTime.Add(time.Duration(1440*(*query.Period)) * time.Second)
-		} else {
-			startTime = endTime
-		}
+		startTime = startTime.Add(time.Duration(CLOUDWATCH_MAXIMUM_POINTS*(*query.Period)) * time.Second)
 		query.EndTime = aws.Time(startTime)
 
 		partResp, err := svc.GetMetricStatistics(ctx, query)
@@ -397,7 +400,7 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 	for i, query := range queries {
 		// auto calibrate period
 		if query.Period == nil {
-			query.Period = aws.Int32(calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit))
+			query.Period = aws.Int32(calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit, c.getStepMs()))
 		}
 
 		mdq := types.MetricDataQuery{
@@ -528,7 +531,7 @@ func (c *CloudWatchClient) QueryPeriod(ctx context.Context, q *prompb.Query, lab
 	startTime := time.Unix(int64(q.Hints.StartMs/1000), int64(q.Hints.StartMs%1000*1000))
 	endTime := time.Unix(int64(q.Hints.EndMs/1000), int64(q.Hints.EndMs%1000*1000))
 	periodUnit := calibratePeriod(startTime)
-	period := calcQueryPeriod(startTime, endTime, periodUnit)
+	period := calcQueryPeriod(startTime, endTime, periodUnit, c.getStepMs())
 	startTime = startTime.Truncate(time.Duration(period) * time.Second)
 	endTime = endTime.Truncate(time.Duration(period) * time.Second).Add(time.Duration(period) * time.Second)
 
