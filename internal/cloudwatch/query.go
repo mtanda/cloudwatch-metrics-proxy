@@ -269,7 +269,7 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Contex
 	// auto calibrate period
 	highResolution := true
 	if query.Period == nil {
-		query.Period = aws.Int32(periodUnit)
+		query.Period = calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit)
 		highResolution = false
 	}
 
@@ -397,7 +397,7 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 	for i, query := range queries {
 		// auto calibrate period
 		if query.Period == nil {
-			query.Period = aws.Int32(periodUnit)
+			query.Period = calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit)
 		}
 
 		mdq := types.MetricDataQuery{
@@ -527,9 +527,10 @@ func (c *CloudWatchClient) QueryPeriod(ctx context.Context, q *prompb.Query, lab
 
 	startTime := time.Unix(int64(q.Hints.StartMs/1000), int64(q.Hints.StartMs%1000*1000))
 	endTime := time.Unix(int64(q.Hints.EndMs/1000), int64(q.Hints.EndMs%1000*1000))
-	period := calibratePeriod(startTime)
-	startTime = startTime.Truncate(time.Duration(period) * time.Second)
-	endTime = endTime.Truncate(time.Duration(period) * time.Second).Add(time.Duration(period) * time.Second)
+	periodUnit := calibratePeriod(startTime)
+	period := calcQueryPeriod(startTime, endTime, periodUnit)
+	startTime = startTime.Truncate(time.Duration(*period) * time.Second)
+	endTime = endTime.Truncate(time.Duration(*period) * time.Second).Add(time.Duration(*period) * time.Second)
 
 	ts := &prompb.TimeSeries{}
 	ts.Labels = append(ts.Labels, prompb.Label{Name: "job", Value: originalJobLabel})
@@ -537,8 +538,8 @@ func (c *CloudWatchClient) QueryPeriod(ctx context.Context, q *prompb.Query, lab
 
 	t := startTime
 	for t.Before(endTime) {
-		ts.Samples = append(ts.Samples, prompb.Sample{Value: float64(period), Timestamp: t.Unix() * 1000})
-		t = t.Add(time.Duration(period) * time.Second)
+		ts.Samples = append(ts.Samples, prompb.Sample{Value: float64(*period), Timestamp: t.Unix() * 1000})
+		t = t.Add(time.Duration(*period) * time.Second)
 	}
 	result = append(result, ts)
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -63,8 +64,17 @@ func isExtendedStatistics(s string) bool {
 	return s != "Sum" && s != "SampleCount" && s != "Maximum" && s != "Minimum" && s != "Average"
 }
 
-func calibratePeriod(startTime time.Time) int32 {
-	var period int32
+func calcQueryPeriod(startTime time.Time, endTime time.Time, periodUnit int64) *int32 {
+	period := calibratePeriod(startTime)
+	queryTimeRange := (endTime).Sub(startTime).Seconds()
+	if queryTimeRange/float64(period) >= 1440 {
+		period = int64(math.Ceil(queryTimeRange/float64(1440)/float64(periodUnit))) * int64(periodUnit)
+	}
+	return aws.Int32(int32(period))
+}
+
+func calibratePeriod(startTime time.Time) int64 {
+	var period int64
 
 	timeDay := 24 * time.Hour
 	now := time.Now().UTC()
