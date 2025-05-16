@@ -116,7 +116,7 @@ func parseQueryMatchers(matchers []*prompb.LabelMatcher) ([]*labels.Matcher, err
 	return result, nil
 }
 
-func parseQueryParams(matchers []*prompb.LabelMatcher, maximumStep int64) ([]types.Statistic, []string, int32, error) {
+func parseQueryParams(matchers []*prompb.LabelMatcher) ([]types.Statistic, []string, int32, error) {
 	statistics := make([]types.Statistic, 0)
 	extendedStatistics := make([]string, 0)
 	period := int32(0)
@@ -148,9 +148,9 @@ func parseQueryParams(matchers []*prompb.LabelMatcher, maximumStep int64) ([]typ
 					}
 					v = int64(d.Seconds())
 				}
-				maximumStep = int64(math.Max(float64(maximumStep), float64(60)))
-				if v < maximumStep {
-					v = maximumStep
+				// assume all metrics minimum resolution is 1 minute
+				if v < 60 {
+					v = 60
 				}
 				period = int32(v)
 			}

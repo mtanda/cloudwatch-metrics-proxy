@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math"
 	"time"
 
 	"github.com/mtanda/cloudwatch_metrics_proxy/internal/cloudwatch"
@@ -20,13 +19,8 @@ func runQuery(ctx context.Context, q *prompb.Query, labelDBUrl string) ([]*promp
 	namespace, debugMode, originalJobLabel, metricName, matchers := parseQuery(q)
 	q.Matchers = matchers
 
-	maximumStep := int64(math.Ceil(float64(q.Hints.StepMs) / float64(1000)))
-	if maximumStep == 0 {
-		maximumStep = 1 // q.Hints.StepMs == 0 in some query...
-	}
-
 	ldb := index.New(labelDBUrl)
-	cloudwatchClient := cloudwatch.New(ldb, maximumStep, PROMETHEUS_LOOKBACK_DELTA, *q.Hints)
+	cloudwatchClient := cloudwatch.New(ldb, PROMETHEUS_LOOKBACK_DELTA, *q.Hints)
 
 	// return calculated period
 	if metricName == "Period" {

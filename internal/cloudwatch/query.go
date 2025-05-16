@@ -41,15 +41,13 @@ func init() {
 
 type CloudWatchClient struct {
 	ldb           *index.LabelDBClient
-	maximumStep   int64
 	lookbackDelta time.Duration
 	readHints     prompb.ReadHints
 }
 
-func New(ldb *index.LabelDBClient, maximumStep int64, lookbackDelta time.Duration, readHints prompb.ReadHints) *CloudWatchClient {
+func New(ldb *index.LabelDBClient, lookbackDelta time.Duration, readHints prompb.ReadHints) *CloudWatchClient {
 	return &CloudWatchClient{
 		ldb:           ldb,
-		maximumStep:   maximumStep,
 		lookbackDelta: lookbackDelta,
 		readHints:     readHints,
 	}
@@ -80,7 +78,7 @@ func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query, debugM
 		return "", nil, err
 	}
 
-	stat, eStat, period, err := parseQueryParams(ms, c.maximumStep)
+	stat, eStat, period, err := parseQueryParams(ms)
 	if err != nil {
 		return "", nil, err
 	}
