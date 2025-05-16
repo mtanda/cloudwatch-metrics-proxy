@@ -271,6 +271,10 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Contex
 
 	startTime := *query.StartTime
 	endTime := *query.EndTime
+	if (endTime).Sub(startTime)/(time.Duration(*query.Period)*time.Second) > PROMETHEUS_MAXIMUM_POINTS {
+		return result, fmt.Errorf("exceed maximum datapoints")
+	}
+
 	var resp *cloudwatch.GetMetricStatisticsOutput
 	for startTime.Before(endTime) {
 		query.StartTime = aws.Time(startTime)
@@ -288,9 +292,6 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Contex
 			resp = partResp
 		}
 		cloudwatchApiCalls.WithLabelValues("GetMetricStatistics", *query.Namespace, "query", "success").Add(float64(1))
-		if len(resp.Datapoints) > PROMETHEUS_MAXIMUM_POINTS {
-			return result, fmt.Errorf("exceed maximum datapoints")
-		}
 	}
 
 	// make time series
