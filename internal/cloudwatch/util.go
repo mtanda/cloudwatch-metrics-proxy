@@ -63,7 +63,8 @@ func isExtendedStatistics(s string) bool {
 	return s != "Sum" && s != "SampleCount" && s != "Maximum" && s != "Minimum" && s != "Average"
 }
 
-func calcQueryPeriod(startTime time.Time, endTime time.Time, periodUnit int32, stepMs int64) int32 {
+func calcQueryPeriod(startTime time.Time, endTime time.Time, stepMs int64) int32 {
+	periodUnit := calibratePeriod(startTime)
 	queryTimeRange := (endTime).Sub(startTime).Seconds()
 	requiredDatapoints := int32(math.Ceil(queryTimeRange / float64(stepMs/1000)))
 	if requiredDatapoints < 1 {
@@ -93,6 +94,16 @@ func calibratePeriod(startTime time.Time) int32 {
 	}
 
 	return period
+}
+
+func calibrateQueryRange(startTime time.Time, endTime time.Time) (time.Time, time.Time) {
+	periodUnit := time.Duration(calibratePeriod(startTime)) * time.Second
+	startTime = startTime.Truncate(periodUnit)
+	endTime = endTime.Truncate(periodUnit)
+	if startTime.Add(periodUnit).Before(endTime) {
+		startTime = startTime.Add(periodUnit)
+	}
+	return startTime, endTime
 }
 
 func parseQueryMatchers(matchers []*prompb.LabelMatcher) ([]*labels.Matcher, error) {

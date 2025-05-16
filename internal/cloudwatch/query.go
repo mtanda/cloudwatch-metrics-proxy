@@ -83,14 +83,22 @@ func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query, debugM
 		return "", nil, err
 	}
 
-	region, queries, err := c.getQueryWithIndex(ctx, matchers, stat, eStat, period, debugMode)
+	startTime := time.Unix(int64(c.readHints.StartMs/1000), int64(c.readHints.StartMs%1000*1000))
+	endTime := time.Unix(int64(c.readHints.EndMs/1000), int64(c.readHints.EndMs%1000*1000))
+	startTime, endTime = calibrateQueryRange(startTime, endTime)
+	calculatedPeriod := calcQueryPeriod(startTime, endTime, c.getStepMs())
+	if period < calculatedPeriod {
+		period = calculatedPeriod
+	}
+
+	region, queries, err := c.getQueryWithIndex(ctx, matchers, stat, eStat, startTime, endTime, period, debugMode)
 	if err != nil {
 		return "", nil, err
 	}
 
 	// if no queries are generated, try to get time series without index
 	if len(queries) == 0 {
-		region, queries, err = c.getQueryWithoutIndex(matchers, stat, eStat, period)
+		region, queries, err = c.getQueryWithoutIndex(matchers, stat, eStat, startTime, endTime, period)
 		if err != nil {
 			return "", nil, err
 		}
@@ -99,7 +107,7 @@ func (c *CloudWatchClient) GetQuery(ctx context.Context, q *prompb.Query, debugM
 	return region, queries, nil
 }
 
-func (c *CloudWatchClient) getQueryWithoutIndex(matchers []*labels.Matcher, stat []types.Statistic, eStat []string, period int32) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) getQueryWithoutIndex(matchers []*labels.Matcher, stat []types.Statistic, eStat []string, startTime time.Time, endTime time.Time, period int32) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
@@ -140,8 +148,8 @@ func (c *CloudWatchClient) getQueryWithoutIndex(matchers []*labels.Matcher, stat
 	if period != 0 {
 		query.Period = aws.Int32(period)
 	}
-	query.StartTime = aws.Time(time.Unix(int64(c.readHints.StartMs/1000), int64(c.readHints.StartMs%1000*1000)))
-	query.EndTime = aws.Time(time.Unix(int64(c.readHints.EndMs/1000), int64(c.readHints.EndMs%1000*1000)))
+	query.StartTime = aws.Time(startTime)
+	query.EndTime = aws.Time(endTime)
 	queries = append(queries, query)
 
 	if region == "" {
@@ -154,16 +162,16 @@ func (c *CloudWatchClient) getQueryWithoutIndex(matchers []*labels.Matcher, stat
 	return region, queries, nil
 }
 
-func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*labels.Matcher, stat []types.Statistic, eStat []string, period int32, debugMode bool) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
+func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*labels.Matcher, stat []types.Statistic, eStat []string, startTime time.Time, endTime time.Time, period int32, debugMode bool) (string, []*cloudwatch.GetMetricStatisticsInput, error) {
 	region := ""
 	queries := make([]*cloudwatch.GetMetricStatisticsInput, 0)
 
-	matchLabelsStartMs := c.readHints.StartMs
-	if time.Unix(c.readHints.EndMs/1000, 0).Sub(time.Unix(c.readHints.StartMs/1000, 0)) < 2*indexInterval {
+	matchLabelsStartTime := startTime
+	if endTime.Sub(startTime) < 2*indexInterval {
 		// expand enough long period to match index
-		matchLabelsStartMs = time.Unix(c.readHints.EndMs/1000, 0).Add(-2*indexInterval).Unix() * 1000
+		matchLabelsStartTime = endTime.Add(-2 * indexInterval)
 	}
-	matchedLabelsList, err := c.ldb.GetMatchedLabels(ctx, matchers, matchLabelsStartMs/1000, c.readHints.EndMs/1000, debugMode)
+	matchedLabelsList, err := c.ldb.GetMatchedLabels(ctx, matchers, matchLabelsStartTime.Unix(), endTime.Unix(), debugMode)
 	if err != nil {
 		return region, queries, err
 	}
@@ -211,8 +219,8 @@ func (c *CloudWatchClient) getQueryWithIndex(ctx context.Context, matchers []*la
 			query.Statistics = []types.Statistic{types.Statistic("Sum"), types.Statistic("SampleCount"), types.Statistic("Maximum"), types.Statistic("Minimum"), types.Statistic("Average")}
 			query.ExtendedStatistics = []string{"p50.00", "p90.00", "p95.00", "p99.00"}
 		}
-		query.StartTime = aws.Time(time.Unix(int64(c.readHints.StartMs/1000), int64(c.readHints.StartMs%1000*1000)))
-		query.EndTime = aws.Time(time.Unix(int64(c.readHints.EndMs/1000), int64(c.readHints.EndMs%1000*1000)))
+		query.StartTime = aws.Time(startTime)
+		query.EndTime = aws.Time(endTime)
 		queries = append(queries, query)
 	}
 
@@ -259,23 +267,6 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricStatistics(ctx context.Contex
 
 	if query.Namespace == nil || query.MetricName == nil {
 		return result, fmt.Errorf("missing parameter")
-	}
-
-	// align time range
-	periodUnit := calibratePeriod(*query.StartTime)
-	rangeAdjust := 0 * time.Second
-	if c.readHints.StartMs%int64(periodUnit*1000) != 0 {
-		rangeAdjust = time.Duration(periodUnit) * time.Second
-	}
-	query.StartTime = aws.Time(query.StartTime.Truncate(time.Duration(periodUnit)))
-	if (*query.StartTime).Add(rangeAdjust).Before(*query.EndTime) {
-		query.StartTime = aws.Time(query.StartTime.Add(rangeAdjust))
-	}
-	query.EndTime = aws.Time(query.EndTime.Truncate(time.Duration(periodUnit)))
-
-	// auto calibrate period
-	if query.Period == nil {
-		query.Period = aws.Int32(calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit, c.getStepMs()))
 	}
 
 	startTime := *query.StartTime
@@ -392,15 +383,9 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 	}
 	var namespace string
 	var period int32
-	periodUnit := calibratePeriod(*queries[0].StartTime)
 
 	// convert to GetMetricData query
 	for i, query := range queries {
-		// auto calibrate period
-		if query.Period == nil {
-			query.Period = aws.Int32(calcQueryPeriod(*query.StartTime, *query.EndTime, periodUnit, c.getStepMs()))
-		}
-
 		mdq := types.MetricDataQuery{
 			Id:         aws.String("id" + strconv.Itoa(i)),
 			ReturnData: aws.Bool(true),
@@ -435,16 +420,6 @@ func (c *CloudWatchClient) queryCloudWatchGetMetricData(ctx context.Context, reg
 		params.EndTime = query.EndTime
 	}
 
-	// align time range
-	rangeAdjust := 0 * time.Second
-	if c.readHints.StartMs%int64(periodUnit*1000) != 0 {
-		rangeAdjust = time.Duration(periodUnit) * time.Second
-	}
-	params.StartTime = aws.Time(params.StartTime.Truncate(time.Duration(periodUnit)))
-	if (*params.StartTime).Add(rangeAdjust).Before(*params.EndTime) {
-		params.StartTime = aws.Time(params.StartTime.Add(rangeAdjust))
-	}
-	params.EndTime = aws.Time(params.EndTime.Truncate(time.Duration(periodUnit)))
 	if (params.EndTime).Sub(*params.StartTime)/(time.Duration(period)*time.Second) > PROMETHEUS_MAXIMUM_POINTS {
 		return result, fmt.Errorf("exceed maximum datapoints")
 	}
@@ -528,8 +503,7 @@ func (c *CloudWatchClient) QueryPeriod(ctx context.Context, q *prompb.Query, lab
 
 	startTime := time.Unix(int64(q.Hints.StartMs/1000), int64(q.Hints.StartMs%1000*1000))
 	endTime := time.Unix(int64(q.Hints.EndMs/1000), int64(q.Hints.EndMs%1000*1000))
-	periodUnit := calibratePeriod(startTime)
-	period := calcQueryPeriod(startTime, endTime, periodUnit, c.getStepMs())
+	period := calcQueryPeriod(startTime, endTime, c.getStepMs())
 	startTime = startTime.Truncate(time.Duration(period) * time.Second)
 	endTime = endTime.Truncate(time.Duration(period) * time.Second).Add(time.Duration(period) * time.Second)
 
