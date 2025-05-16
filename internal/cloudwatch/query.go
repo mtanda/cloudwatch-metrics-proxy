@@ -56,7 +56,7 @@ func New(ldb *index.LabelDBClient, lookbackDelta time.Duration, readHints prompb
 func (c *CloudWatchClient) getStepMs() int64 {
 	if c.readHints.StepMs == 0 {
 		// this query might be instant query, just return one datapoint in 5 minutes (lookback delta)
-		return 300 * 1000
+		return 60 * 1000
 	}
 	return c.readHints.StepMs
 }
